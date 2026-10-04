@@ -1,0 +1,23 @@
+C4Container
+  title Nivel 2 — Contenedores
+
+  Person(publico, "Público de la charla")
+  Person(ponente, "Ponente")
+
+  Container_Boundary(sistema, "Mercados de predicción en vivo") {
+    Container(spa, "Interfaz web", "HTML y JavaScript", "Tablero proyectable; sondea precios cada 2 s")
+    Container(api, "API de mercados", "FastAPI sobre Cloud Run", "Valida órdenes, aplica LMSR, orquesta la resolución")
+    ContainerDb(estado, "Estado del mercado", "Diccionario en memoria", "Mercados, saldos y posiciones; se pierde al reiniciar")
+  }
+
+  System_Ext(claude, "API de Claude", "Veredicto con búsqueda web")
+  Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Imagen inmutable por commit")
+
+  Rel(publico, spa, "Opera", "HTTPS")
+  Rel(ponente, spa, "Crea y resuelve", "HTTPS")
+  Rel(spa, api, "Llama", "JSON sobre HTTPS")
+  Rel(api, estado, "Lee y escribe", "en proceso")
+  Rel(api, claude, "Resuelve el mercado", "HTTPS/JSON")
+  Rel(registry, api, "Despliega la revisión", "Cloud Run")
+
+  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

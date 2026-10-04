@@ -1,0 +1,31 @@
+C4Deployment
+  title Despliegue — CI/CD en Google Cloud
+
+  Deployment_Node(dev, "Laptop del ponente", "git") {
+    Container(repo, "Repositorio", "Python 3.12", "Código y pruebas")
+  }
+
+  Deployment_Node(gh, "GitHub Actions", "runner ubuntu-latest") {
+    Container(ci, "Pipeline CI", "ruff + pytest", "Bloquea el merge si falla")
+    Container(cd, "Pipeline CD", "WIF + gcloud", "Construye y despliega sin llaves estáticas")
+  }
+
+  Deployment_Node(gcp, "Google Cloud", "proyecto del taller") {
+    Deployment_Node(ar, "Artifact Registry", "us-central1") {
+      Container(imagen, "Imagen OCI", "distroless", "Etiquetada con el SHA del commit")
+    }
+    Deployment_Node(run, "Cloud Run", "servicio gestionado") {
+      Container(servicio, "oraculo-mercados", "FastAPI", "max-instances 1, concurrency 80")
+    }
+    Deployment_Node(sm, "Secret Manager", "regional") {
+      Container(secreto, "ANTHROPIC_API_KEY", "secreto", "Montado como variable de entorno")
+    }
+  }
+
+  Rel(repo, ci, "push y pull request")
+  Rel(ci, cd, "verde en main")
+  Rel(cd, imagen, "docker push")
+  Rel(imagen, servicio, "gcloud run deploy")
+  Rel(servicio, secreto, "lee al arrancar")
+
+  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

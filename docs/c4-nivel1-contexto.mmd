@@ -1,0 +1,17 @@
+C4Context
+  title Nivel 1 — Contexto: mercados de predicción en vivo
+
+  Person(publico, "Público de la charla", "Opera desde su teléfono con saldo ficticio")
+  Person(ponente, "Ponente", "Crea mercados y dispara la resolución")
+
+  System(mercado, "Mercados de predicción en vivo", "Cotiza con LMSR, acepta órdenes y resuelve con un oráculo de IA")
+
+  System_Ext(claude, "API de Claude", "Emite un veredicto usando búsqueda web")
+  System_Ext(fuentes, "Fuentes web públicas", "Releases, bancos centrales, registros oficiales")
+
+  Rel(publico, mercado, "Compra SÍ o NO", "HTTPS")
+  Rel(ponente, mercado, "Crea y resuelve", "HTTPS")
+  Rel(mercado, claude, "Pregunta y criterio", "HTTPS/JSON")
+  Rel(claude, fuentes, "Busca evidencia", "HTTPS")
+
+  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API con recarga (oráculo simulado)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--port", "8080"],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "ORACLE_BACKEND": "mock" }
+    },
+    {
+      "name": "API con recarga (Vertex AI real)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--port", "8080"],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

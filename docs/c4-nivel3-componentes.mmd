@@ -1,0 +1,20 @@
+C4Component
+  title Nivel 3 — Componentes de la API de mercados
+
+  Container_Boundary(api, "API de mercados (FastAPI)") {
+    Component(rutas, "Rutas HTTP", "main.py / Pydantic", "Valida cuerpo y rangos antes de tocar el dominio")
+    Component(motor, "Motor de mercados", "market.py", "Órdenes, saldos, cooldown y liquidación bajo lock")
+    Component(lmsr, "LMSR", "lmsr.py", "Función de costo y precio; pérdida acotada por b·ln2")
+    Component(oraculo, "Oráculo", "oracle.py", "Pide veredicto y aplica la política fail-closed")
+  }
+
+  ContainerDb(estado, "Estado del mercado", "memoria")
+  System_Ext(claude, "API de Claude", "Modelo con búsqueda web")
+
+  Rel(rutas, motor, "Invoca casos de uso")
+  Rel(motor, lmsr, "Calcula precio y acciones")
+  Rel(motor, estado, "Muta bajo lock")
+  Rel(motor, oraculo, "Pide resolución", "async")
+  Rel(oraculo, claude, "Pregunta y criterio", "HTTPS/JSON")
+
+  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

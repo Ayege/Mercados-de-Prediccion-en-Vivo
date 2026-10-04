@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Instalar dependencias",
+      "type": "shell",
+      "command": "python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt"
+    },
+    {
+      "label": "Tests",
+      "type": "shell",
+      "command": ".venv/bin/pytest -q",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Revisar estilo",
+      "type": "shell",
+      "command": ".venv/bin/ruff check .",
+      "problemMatcher": []
+    },
+    {
+      "label": "Construir imagen",
+      "type": "shell",
+      "command": "docker build -t oraculo-api:dev .",
+      "problemMatcher": []
+    }
+  ]
+}
