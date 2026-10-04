@@ -78,3 +78,10 @@ docker run -p 8080:8080 -e ORACLE_BACKEND=mock oraculo-api:dev
 
 - Interfaz de proyección para la charla
 - Pipeline de GitHub Actions hacia Cloud Run con identidad federada
+
+## Diagramas
+
+`docs/` contiene los cuatro diagramas C4 en Mermaid: contexto, contenedores,
+componentes y despliegue. GitHub los renderiza solo si están dentro de un bloque
+```mermaid en un archivo Markdown; para verlos en VS Code, instala la extensión
+Markdown Preview Mermaid Support o pégalos en mermaid.live.

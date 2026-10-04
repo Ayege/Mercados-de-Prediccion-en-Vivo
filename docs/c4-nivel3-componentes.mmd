@@ -1,20 +1,27 @@
 C4Component
-  title Nivel 3 — Componentes de la API de mercados
+  title Nivel 3 — Componentes de oraculo-api
 
-  Container_Boundary(api, "API de mercados (FastAPI)") {
-    Component(rutas, "Rutas HTTP", "main.py / Pydantic", "Valida cuerpo y rangos antes de tocar el dominio")
-    Component(motor, "Motor de mercados", "market.py", "Órdenes, saldos, cooldown y liquidación bajo lock")
+  Container_Boundary(api, "oraculo-api (FastAPI)") {
+    Component(rutas, "Rutas HTTP", "main.py con Pydantic", "Valida cuerpo y rangos antes de tocar el dominio")
+    Component(motor, "Motor de mercado", "market.py", "Órdenes, saldos, cooldown y liquidación bajo lock")
     Component(lmsr, "LMSR", "lmsr.py", "Función de costo y precio; pérdida acotada por b·ln2")
-    Component(oraculo, "Oráculo", "oracle.py", "Pide veredicto y aplica la política fail-closed")
+    Component(puerto, "Puerto Oracle", "oracle.py (Protocol)", "Contrato: pregunta y criterio devuelven un veredicto")
+    Component(vertexad, "Adaptador Vertex AI", "oracle.py", "Llama a Gemini con grounding y lee groundingMetadata")
+    Component(mock, "Adaptador simulado", "oracle.py", "Veredicto determinista para ensayos y tests")
+    Component(politica, "Política de aceptación", "apply_policy", "Confianza mínima, dos dominios independientes, fail-closed")
   }
 
   ContainerDb(estado, "Estado del mercado", "memoria")
-  System_Ext(claude, "API de Claude", "Modelo con búsqueda web")
+  System_Ext(vertex, "Vertex AI", "Gemini con grounding")
 
   Rel(rutas, motor, "Invoca casos de uso")
   Rel(motor, lmsr, "Calcula precio y acciones")
   Rel(motor, estado, "Muta bajo lock")
-  Rel(motor, oraculo, "Pide resolución", "async")
-  Rel(oraculo, claude, "Pregunta y criterio", "HTTPS/JSON")
+  Rel(motor, puerto, "Pide resolución", "async")
+  Rel(puerto, vertexad, "Implementado por")
+  Rel(puerto, mock, "Implementado por")
+  Rel(vertexad, vertex, "generateContent", "HTTPS/JSON")
+  Rel(vertexad, politica, "Veredicto propuesto y fuentes")
+  Rel(mock, politica, "Veredicto propuesto y fuentes")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

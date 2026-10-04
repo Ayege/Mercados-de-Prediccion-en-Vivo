@@ -1,23 +1,25 @@
 C4Container
-  title Nivel 2 — Contenedores
+  title Nivel 2 — Contenedores en Google Cloud
 
-  Person(publico, "Público de la charla")
+  Person(publico, "Audiencia de la charla")
   Person(ponente, "Ponente")
 
-  Container_Boundary(sistema, "Mercados de predicción en vivo") {
-    Container(spa, "Interfaz web", "HTML y JavaScript", "Tablero proyectable; sondea precios cada 2 s")
-    Container(api, "API de mercados", "FastAPI sobre Cloud Run", "Valida órdenes, aplica LMSR, orquesta la resolución")
+  Container_Boundary(sistema, "Proyecto de Google Cloud") {
+    Container(spa, "Interfaz web", "HTML y JavaScript", "Tablero proyectable servido por la propia API")
+    Container(api, "oraculo-api", "FastAPI sobre Cloud Run", "Valida órdenes, aplica LMSR, orquesta la resolución")
     ContainerDb(estado, "Estado del mercado", "Diccionario en memoria", "Mercados, saldos y posiciones; se pierde al reiniciar")
+    Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Una imagen por commit")
+    Container_Ext(logs, "Cloud Logging", "Trazas", "Una entrada por veredicto del oráculo")
   }
 
-  System_Ext(claude, "API de Claude", "Veredicto con búsqueda web")
-  Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Imagen inmutable por commit")
+  System_Ext(vertex, "Vertex AI", "Gemini con grounding de Búsqueda de Google")
 
   Rel(publico, spa, "Opera", "HTTPS")
   Rel(ponente, spa, "Crea y resuelve", "HTTPS")
   Rel(spa, api, "Llama", "JSON sobre HTTPS")
   Rel(api, estado, "Lee y escribe", "en proceso")
-  Rel(api, claude, "Resuelve el mercado", "HTTPS/JSON")
+  Rel(api, vertex, "Resuelve el mercado", "ADC, sin llaves")
+  Rel(api, logs, "Registra la traza del veredicto")
   Rel(registry, api, "Despliega la revisión", "Cloud Run")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

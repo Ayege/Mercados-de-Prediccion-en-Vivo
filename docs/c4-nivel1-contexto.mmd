@@ -1,17 +1,19 @@
 C4Context
-  title Nivel 1 — Contexto: mercados de predicción en vivo
+  title Nivel 1 — Contexto: mercado de predicción en vivo
 
-  Person(publico, "Público de la charla", "Opera desde su teléfono con saldo ficticio")
+  Person(publico, "Audiencia de la charla", "Opera desde su teléfono con saldo ficticio")
   Person(ponente, "Ponente", "Crea mercados y dispara la resolución")
 
-  System(mercado, "Mercados de predicción en vivo", "Cotiza con LMSR, acepta órdenes y resuelve con un oráculo de IA")
+  System(mercado, "Mercado de predicción en vivo", "Cotiza con LMSR, acepta órdenes y resuelve con un oráculo de IA")
 
-  System_Ext(claude, "API de Claude", "Emite un veredicto usando búsqueda web")
-  System_Ext(fuentes, "Fuentes web públicas", "Releases, bancos centrales, registros oficiales")
+  System_Ext(vertex, "Vertex AI", "Gemini emite un veredicto con grounding de Búsqueda de Google")
+  System_Ext(fuentes, "Fuentes primarias", "Releases, bancos centrales, registros oficiales")
+  System_Ext(gha, "GitHub Actions", "Prueba, construye y despliega")
 
   Rel(publico, mercado, "Compra SÍ o NO", "HTTPS")
   Rel(ponente, mercado, "Crea y resuelve", "HTTPS")
-  Rel(mercado, claude, "Pregunta y criterio", "HTTPS/JSON")
-  Rel(claude, fuentes, "Busca evidencia", "HTTPS")
+  Rel(mercado, vertex, "Pregunta y criterio", "HTTPS/JSON")
+  Rel(vertex, fuentes, "Busca evidencia", "grounding")
+  Rel(gha, mercado, "Despliega", "identidad federada")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

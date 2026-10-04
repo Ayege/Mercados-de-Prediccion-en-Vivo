@@ -1,24 +1,24 @@
 C4Deployment
   title Despliegue — CI/CD en Google Cloud
 
-  Deployment_Node(dev, "Laptop del ponente", "git") {
+  Deployment_Node(dev, "Laptop de la ponente", "git y VS Code") {
     Container(repo, "Repositorio", "Python 3.12", "Código y pruebas")
   }
 
   Deployment_Node(gh, "GitHub Actions", "runner ubuntu-latest") {
-    Container(ci, "Pipeline CI", "ruff + pytest", "Bloquea el merge si falla")
-    Container(cd, "Pipeline CD", "WIF + gcloud", "Construye y despliega sin llaves estáticas")
+    Container(ci, "Pipeline de pruebas", "ruff y pytest", "Bloquea el despliegue si falla")
+    Container(cd, "Pipeline de despliegue", "identidad federada y gcloud", "Sin llaves de servicio almacenadas")
   }
 
-  Deployment_Node(gcp, "Google Cloud", "proyecto del taller") {
-    Deployment_Node(ar, "Artifact Registry", "us-central1") {
-      Container(imagen, "Imagen OCI", "distroless", "Etiquetada con el SHA del commit")
+  Deployment_Node(gcp, "Google Cloud", "proyecto de la charla") {
+    Deployment_Node(ar, "Artifact Registry") {
+      Container(imagen, "Imagen OCI", "python:3.12-slim", "Etiquetada con el SHA del commit")
     }
     Deployment_Node(run, "Cloud Run", "servicio gestionado") {
-      Container(servicio, "oraculo-mercados", "FastAPI", "max-instances 1, concurrency 80")
+      Container(servicio, "oraculo-api", "FastAPI", "max-instances 1 por el estado en memoria")
     }
-    Deployment_Node(sm, "Secret Manager", "regional") {
-      Container(secreto, "ANTHROPIC_API_KEY", "secreto", "Montado como variable de entorno")
+    Deployment_Node(iam, "IAM") {
+      Container(sa, "Cuenta de servicio", "identidad", "roles/aiplatform.user; no hay secretos que montar")
     }
   }
 
@@ -26,6 +26,6 @@ C4Deployment
   Rel(ci, cd, "verde en main")
   Rel(cd, imagen, "docker push")
   Rel(imagen, servicio, "gcloud run deploy")
-  Rel(servicio, secreto, "lee al arrancar")
+  Rel(servicio, sa, "actúa como")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
