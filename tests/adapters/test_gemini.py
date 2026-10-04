@@ -1,6 +1,13 @@
+import asyncio
+
 import pytest
 
-from app.oracle import apply_policy, normalize_sources, parse_verdict
+from app.adapters.oracle.gemini import inject_fault, interpret, normalize_sources, parse_verdict, run
+from app.adapters.oracle.mock import MockOracle
+from app.application.ports import FAULTS
+from app.domain.verdict import AcceptancePolicy
+
+POLICY = AcceptancePolicy()
 
 CHUNKS = [
     {"web": {"uri": "https://redirect.test/1", "title": "kubernetes.io", "domain": "kubernetes.io"}},
@@ -20,12 +27,12 @@ def test_parse_verdict_rejects_non_json():
 
 def test_redirect_uris_do_not_collapse_domains():
     # Los dos chunks comparten host en la uri; el dominio real los distingue.
-    assert {e["domain"] for e in TWO} == {"kubernetes.io", "github.com"}
+    assert {e.domain for e in TWO} == {"kubernetes.io", "github.com"}
 
 
 def test_domain_falls_back_to_title():
     src = normalize_sources([{"web": {"uri": "https://redirect.test/3", "title": "WWW.Python.org"}}])
-    assert src[0]["domain"] == "python.org"
+    assert src[0].domain == "python.org"
 
 
 def test_chunk_without_domain_or_title_is_dropped():
@@ -36,22 +43,49 @@ def test_non_https_chunk_is_dropped():
     assert normalize_sources([{"web": {"uri": "http://x.test", "domain": "x.test"}}]) == []
 
 
-def test_accepts_confident_verdict_with_two_domains():
-    assert apply_policy({"outcome": "YES", "confidence": 0.93}, TWO, "m").outcome == "YES"
+# --- fallos inyectados: misma ruta que Vertex AI ----------------------------
+
+GOOD = {"candidates": [{
+    "content": {"parts": [{"text": '{"outcome": "NO", "confidence": 0.95, "reasoning": "r"}'}]},
+    "groundingMetadata": {"groundingChunks": CHUNKS, "webSearchQueries": ["q"]},
+}]}
 
 
-def test_low_confidence_becomes_unresolved():
-    assert apply_policy({"outcome": "YES", "confidence": 0.5}, TWO, "m").outcome == "UNRESOLVED"
+def test_clean_payload_is_accepted():
+    assert interpret(inject_fault(GOOD, None, []), "m", [], POLICY).outcome == "NO"
 
 
-def test_single_domain_becomes_unresolved():
-    one = normalize_sources([CHUNKS[0]])
-    assert apply_policy({"outcome": "NO", "confidence": 0.99}, one, "m").outcome == "UNRESOLVED"
+@pytest.mark.parametrize("fault", ["baja_confianza", "un_dominio", "json_malformado"])
+def test_each_payload_fault_is_rejected_by_policy(fault):
+    trace = []
+    v = interpret(inject_fault(GOOD, fault, trace), "m", trace, POLICY)
+    assert v.outcome == "UNRESOLVED"
+    assert any(fault in line for line in v.trace)
 
 
-def test_no_grounding_at_all_becomes_unresolved():
-    assert apply_policy({"outcome": "YES", "confidence": 1.0}, [], "m").outcome == "UNRESOLVED"
+def test_fault_injection_does_not_mutate_original():
+    inject_fault(GOOD, "json_malformado", [])
+    assert "outcome" in GOOD["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def test_invalid_outcome_fails_closed():
-    assert apply_policy({"outcome": "MAYBE", "confidence": 1}, TWO, "m").outcome == "UNRESOLVED"
+@pytest.mark.parametrize("fault", list(FAULTS))
+def test_mock_oracle_fails_closed_for_every_fault(fault, monkeypatch):
+    monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
+    v = asyncio.run(MockOracle().resolve("¿x?", "c", fault))
+    assert v.outcome == "UNRESOLVED"
+
+
+def test_network_down_never_calls_the_model():
+    called = []
+
+    async def call(q, c):
+        called.append(q)
+        return GOOD
+
+    v = asyncio.run(run(call, "¿x?", "c", "m", [], POLICY, "red_caida"))
+    assert v.outcome == "UNRESOLVED" and called == []
+
+
+def test_unknown_fault_is_rejected():
+    with pytest.raises(ValueError):
+        asyncio.run(MockOracle().resolve("¿x?", "c", "meteorito"))

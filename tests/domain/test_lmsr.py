@@ -1,7 +1,7 @@
 import math
 import random
 
-from app import lmsr
+from app.domain import lmsr
 
 
 def test_initial_price_is_even():
