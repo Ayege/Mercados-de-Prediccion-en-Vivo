@@ -101,3 +101,56 @@ def test_repair_keeps_scaling_and_clears_the_fault():
 def test_node_honors_the_injected_fault(fault, status, monkeypatch):
     monkeypatch.setenv("NODO_FALLA", fault)
     assert TestClient(node_app).get("/salud").status_code == status
+
+
+# --- mercado real: precios y agentes -------------------------------------------------
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from app.adapters.prices import SNAPSHOT, parse  # noqa: E402
+from app.domain.cloud.real_market import AgentState  # noqa: E402
+
+SKUS = json.loads((Path(__file__).parent / "fixtures" / "cloud_run_skus.json").read_text())["skus"]
+
+
+def test_prices_are_parsed_from_the_real_catalog():
+    table = parse(SKUS)
+    assert table.regions == SNAPSHOT.regions and table.per_request == SNAPSHOT.per_request
+
+
+def test_incomplete_catalog_fails_closed():
+    with pytest.raises(ValueError):
+        parse([s for s in SKUS if "Min Instance" not in s["description"]])
+
+
+def test_agent_service_is_prefixed_labeled_and_warm_is_min_instances():
+    g = Recorder({("POST", "services"): (200, {})})
+    asyncio.run(g.ensure_agent("r1", "us-east1", warm=True))
+    _, _, params, body = g.sent[-1]
+    assert params["serviceId"] == "oraculo-agente-r1"
+    assert body["labels"] == {"oraculo-demo": "true", "oraculo-rol": "agente"}
+    assert body["template"]["scaling"] == {"minInstanceCount": 1, "maxInstanceCount": 1}
+    env = {e["name"]: e["value"] for e in body["template"]["containers"][0]["env"]}
+    assert env["AGENTE_ID"] == "r1"
+
+
+@pytest.mark.parametrize("agent_id", ["../api", "oraculo-api", "r1;rm", "R1"])
+def test_agent_ids_outside_the_pattern_are_refused(agent_id):
+    with pytest.raises(ValueError):
+        asyncio.run(Recorder().ensure_agent(agent_id, "us-east1", warm=False))
+
+
+def test_node_does_real_work_and_reports_server_time(monkeypatch):
+    monkeypatch.setenv("AGENTE_ID", "r1")
+    body = TestClient(node_app).get("/trabajo").json()
+    assert body["agente"] == "r1" and body["server_ms"] > 0
+
+
+def test_work_without_identity_token_reports_unauthorized(monkeypatch):
+    async def no_token(audience):
+        raise RuntimeError("sin metadatos")
+
+    monkeypatch.setattr("app.adapters.infra.cloudrun.id_token", no_token)
+    out = asyncio.run(Recorder().work(AgentState("r1", "us-east1", uri="https://x"), 2))
+    assert [r.status for r in out] == [401, 401]

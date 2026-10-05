@@ -31,6 +31,9 @@ class Settings:
     infra_max_per_region: int = 2
     infra_max_services: int = 3
     infra_ttl: float = 1800.0
+    market_agents: int = 4
+    market_max_warm: int = 1
+    market_max_requests: int = 12
     production: bool = False  # True en Cloud Run (K_SERVICE): se exigen los controles
     api_docs: bool = True
     vigil_account: str = ""  # cuenta de servicio de Cloud Scheduler, para verificar su OIDC
@@ -62,6 +65,9 @@ class Settings:
             infra_max_per_region=int(env.get("INFRA_MAX_POR_REGION", "2")),
             infra_max_services=int(env.get("INFRA_MAX_SERVICIOS", "3")),
             infra_ttl=float(env.get("INFRA_TTL_SEGUNDOS", "1800")),
+            market_agents=int(env.get("MERCADO_AGENTES", "4")),
+            market_max_warm=int(env.get("MERCADO_MAX_CALIENTES", "1")),
+            market_max_requests=int(env.get("MERCADO_MAX_PETICIONES", "12")),
             production=bool(env.get("K_SERVICE")),
             api_docs=env.get("API_DOCS", "0" if env.get("K_SERVICE") else "1") == "1",
             vigil_account=env.get("VIGILIA_CUENTA", ""),

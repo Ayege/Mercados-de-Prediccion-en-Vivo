@@ -5,13 +5,17 @@ los precios son probabilidades. Un oráculo de IA intenta resolver cada pregunta
 buscando en la web, y el código decide si acepta su veredicto. Todo corre en
 Google Cloud.
 
-La segunda parte es una **nube autónoma**. En la parte simulada, doce agentes
-compran y venden cómputo, predicen la demanda, aprenden a fijar precios, forman
-coaliciones, detectan y reparan fallas, evolucionan por selección y mutación, y
-compiten con un modelo generativo para diseñar la topología de despliegue. En
-la parte real, tres de esos bucles actúan sobre Cloud Run: despliegan la
-topología, escalan con el tráfico de los móviles de la sala y reparan fallas
-reales. La sala apuesta sobre lo que pasará. Ver
+La segunda parte es una **nube autónoma que actúa sobre Cloud Run de verdad**:
+- Despliega la topología que propone un modelo generativo.
+- Escala con el tráfico de los móviles de la sala.
+- Repara fallas reales.
+- Tiene un **mercado real**: agentes con servicios propios venden peticiones
+  reales, con costos tomados del catálogo de precios de Cloud Billing, forman
+  coaliciones que se ejecutan y evolucionan según la ganancia que de verdad
+  obtienen.
+
+Un laboratorio simulado de doce agentes muestra las mismas técnicas a cámara
+rápida. La sala apuesta sobre lo que pasará. Ver
 [La nube autónoma](#la-nube-autónoma).
 
 Hay una demo desplegada en el proyecto `oraculo-6d1578`, en
@@ -22,9 +26,9 @@ https://oraculo-api-346171942822.us-east1.run.app. Ver
 
 | Pantalla | Quién la ve | Qué muestra | Qué te dice en pantalla |
 | --- | --- | --- | --- |
-| `/` | La audiencia, en el móvil | Las preguntas, el precio y los botones para apostar; el censo privado si la pregunta es de la sala | Que no busquen; que el nombre no es una cuenta; si hay infraestructura real, que **su móvil es la demanda** |
+| `/` | La audiencia, en el móvil | Las preguntas, el precio y los botones para apostar; el censo privado si la pregunta es de la sala | Que no busquen; que el nombre no es una cuenta; si hay infraestructura real, que **su móvil es la demanda** que escala la nube y que los agentes se disputan |
 | `/proyeccion.html` | Todos, en el proyector | Cada mercado, su precio, quién lo resuelve y la línea «la sala decía X; el juez dice Y» | Qué mide cada tipo de pregunta, con una etiqueta distinta para «Nube simulada» y «Nube real · Cloud Run»; cómo ver los controles si falta la clave |
-| `/nube.html` | El ponente, en el proyector | La simulación, la infraestructura real, la política de actuación y los incidentes | Una guía plegable «Cómo usar esta página», ayuda al pasar el cursor por cada botón y una **pista que cambia con el estado**: qué falta, qué esperar y qué hacer ahora |
+| `/nube.html` | El ponente, en el proyector | La infraestructura real, el **mercado real** (agentes, precios del catálogo, subastas, contratos, generaciones), la política de actuación, los incidentes y el laboratorio simulado | Una guía plegable «Cómo usar esta página», ayuda al pasar el cursor por cada botón, una **pista que cambia con el estado** en la infraestructura y otra en el mercado real, y las tarjetas del laboratorio marcadas como simuladas |
 
 Los controles del ponente solo aparecen si la URL termina en `#clave=…`. Sin
 la clave, las tres pantallas siguen funcionando como vistas de solo lectura.
@@ -98,22 +102,35 @@ interfaz dice cuál es:
 | La visión pide | Lo que hay aquí | Dónde | Lo que **no** es |
 | --- | --- | --- | --- |
 | Predecir la demanda y ajustar la oferta en tiempo real | **Real:** Holt predice las peticiones por segundo de la sala y fija las instancias mínimas de los nodos de Cloud Run. **Simulado:** Holt-Winters con autoescalado por agente | `application/infra.py`, `domain/cloud/forecast.py` | No es un modelo profundo. La demanda real son los móviles de la sala, no tráfico de producción |
-| Descubrir estrategias de fijación de precios | Q-learning tabular: estado = (escasez prevista, cuánto vendió); acción = subir, mantener o bajar el margen | `agents.py` | No es RL profundo. Son 9 estados y 3 acciones |
-| Formar coaliciones | Contratos que exigen dos regiones y más cpu de la que tiene cualquier agente; reparto por valor de Shapley exacto | `coalitions.py` | La formación es codiciosa, no un equilibrio negociado |
+| Descubrir estrategias de fijación de precios | **Real:** cada agente del mercado real ajusta su margen con Q-learning; la recompensa es su ganancia real (ingreso por peticiones atendidas a tiempo menos el costo real de Cloud Run). **Laboratorio:** lo mismo sobre doce agentes simulados | `real_market.py`, `agents.py` | No es RL profundo. Son unos pocos estados y 3 acciones |
+| Formar coaliciones | **Real:** contratos de peticiones que ningún agente atiende solo y que exigen dos regiones; la coalición los ejecuta de verdad, se paga solo si cumple, y se reparte por valor de Shapley exacto. **Laboratorio:** lo mismo con cpu simulada | `real_market.py`, `coalitions.py` | La formación es codiciosa, no un equilibrio negociado |
 | Teoría de juegos evolutiva | Proporción de cada estrategia por generación, contra lo que predice la dinámica del replicador | `evolution.py` | El algoritmo genético no es el replicador: la vista muestra cuándo se separan |
-| Evolucionar por mutación y selección | Algoritmo genético: élite del 25 %, torneo, cruce uniforme, mutación gaussiana. Los hijos heredan el genoma, no lo aprendido | `evolution.py` | No se reescriben a sí mismos. Evolucionan cuatro parámetros |
+| Evolucionar por mutación y selección | **Real:** el genoma incluye `warm` (pagar una instancia mínima o arriesgar arranques en frío). Mutarlo cambia la configuración real del servicio; la aptitud es la ganancia real. **Laboratorio:** algoritmo genético sobre doce agentes | `real_market.py`, `evolution.py` | No se reescriben a sí mismos. Evolucionan tres parámetros |
 | Detectar y responder a fallas | **Real:** sondeos con token de identidad a cada nodo de Cloud Run; el detector EWMA ve la falla y la repara desplegando una revisión sana. **Simulado:** lo mismo sobre nodos ficticios | `application/infra.py`, `anomaly.py` | La falla real se inyecta (una revisión con `NODO_FALLA`), no es una caída espontánea |
 | Generar arquitecturas | Gemini propone topologías; un algoritmo genético compite con él; `TopologyPolicy` acepta o rechaza a ambos. **Real:** la topología adoptada se despliega como servicios `oraculo-nodo-<región>`, después de pasar también por `ActuationPolicy` | `topology.py`, `domain/cloud/infra.py`, `adapters/infra/` | El modelo nunca llama a la nube. Dos compuertas en código se interponen |
-| Mercado de recursos | Subasta de precio uniforme por recurso | `auction.py` | **No es descentralizado**: hay un subastador central. Lo descentralizado son las coaliciones |
+| Mercado de recursos | **Real:** subasta de precio uniforme de la demanda real de la sala entre los agentes, con un tope de 12 peticiones por ciclo | `auction.py`, `real_market.py` | **No es descentralizado**: hay un subastador central. El dinero es contable: nadie le paga a un agente, pero cada costo es lo que Google Cloud cobra de verdad |
 | Pipelines de CI/CD en Google Cloud | `cloudbuild.yaml`: pruebas → imagen → Artifact Registry → Cloud Run | raíz del repo | El pipeline despliega la API; los nodos los despliega el controlador |
 
 ### Qué es real y qué no
 
-Con `INFRA_MODE=real`, tres bucles actúan sobre Cloud Run de verdad:
-**predicción y autoescalado**, **detección y reparación**, y **despliegue de la
-topología** que propuso el modelo o la búsqueda evolutiva. Precios, coaliciones
-y evolución de agentes siguen simulados: Google Cloud no tiene un mercado donde
-unos agentes se vendan cómputo entre sí, e inventarlo sería decorado.
+Con `INFRA_MODE=real` y la actuación activa, todo esto actúa sobre Cloud Run de
+verdad:
+
+| Bucle | Qué es real |
+| --- | --- |
+| Predicción y autoescalado | Holt predice las peticiones reales de la sala y fija las instancias mínimas reales |
+| Detección y reparación | Sondeos reales con token de identidad; la reparación despliega una revisión sana |
+| Topología | La que propone Gemini o la búsqueda evolutiva se despliega como `oraculo-nodo-<región>`. El costo de cada región es la proporción real de precios de Cloud Run; latencia y disponibilidad del catálogo son estimaciones |
+| Mercado real | 4 agentes, cada uno con su servicio `oraculo-agente-<id>`. Venden peticiones reales de trabajo; los costos salen del catálogo de Cloud Billing en vivo; solo cobran lo atendido a tiempo (1 s) |
+| Coaliciones | Contratos que exigen atender desde dos regiones, ejecutados de verdad y pagados solo si cumplen |
+| Evolución | Cada 12 ciclos, selección y mutación con la ganancia real como aptitud. El gen `warm` cambia la instancia mínima real |
+
+Lo que sigue simulado: el **laboratorio de doce agentes** (tarjetas marcadas
+«laboratorio simulado» en `/nube.html`), que muestra las mismas técnicas a
+cámara rápida y alimenta las preguntas `simulacion` de la sala. El dinero del
+mercado real es contable: ningún agente recibe un pago, pero cada costo
+corresponde a algo que Google Cloud cobra de verdad, y cada ingreso, a una
+petición que de verdad se atendió a tiempo.
 
 Entre una decisión y la nube hay dos compuertas en código:
 
@@ -132,6 +149,37 @@ desde `/nube.html`. `INFRA_MODE` puede ser `apagado` (el predeterminado),
 
 La parte simulada es determinista dada la semilla (`SIM_SEED`) y las acciones
 del ponente.
+
+### El mercado real, con números
+
+Los precios vienen de la API pública de Cloud Billing (precios de lista, sin
+descontar el nivel gratuito, para no subestimar). El 2026-10-05, en us-east1:
+
+| Concepto | Costo |
+| --- | --- |
+| Una petición de trabajo (¼ vCPU, 256 MiB, redondeada a 100 ms) | 1,06 µUSD |
+| Una hora con instancia mínima encendida | 0,45 centavos (0,63 en regiones de nivel 2) |
+| Una hora de mercado con 12 peticiones cada 10 s y un agente caliente | ≈ 1 centavo |
+
+Con el tráfico de una sala, mantener una instancia caliente cuesta más de lo
+que se gana evitando arranques en frío. La evolución suele descubrirlo y
+apagarla. No está programado: es la economía real de Cloud Run.
+
+**Medido en producción el 2026-10-05**, 5 minutos y 24 ciclos con 4 agentes:
+
+| Agente | Región | Latencia real (p50) | Resultado |
+| --- | --- | --- | --- |
+| r1 | us-east1 | 14 ms | Gana: la misma región que la API |
+| r2 | us-central1 | 55 ms | Gana menos |
+| r3 | europe-west1 | 111 ms | Gana; mejor de la generación 2 |
+| r4 | southamerica-east1 | 138 ms | Pagó instancia caliente en una región de nivel 2 y casi no vendió: −157 µUSD. En la generación 2, la evolución le apagó la instancia |
+
+- **Contratos:** los tres contratos de dos regiones se cumplieron, 6 de 6 a tiempo.
+- **Costo total del mercado:** 531 µUSD, es decir, 0,05 centavos.
+- **Peticiones:** 468, todas con 200.
+
+Las latencias son de la API en us-east1 hacia cada región: la geografía es
+real, no está en ningún catálogo.
 
 ### El mismo patrón que el oráculo
 
@@ -158,8 +206,8 @@ la pena decir en voz alta.
 
 ### Qué afirmar sobre esta parte
 
-- ✗ «Esta nube se gobierna sola». Tres bucles actúan de verdad sobre unos
-  pocos servicios con límites duros; el resto es una simulación de juguete.
+- ✗ «Esta nube se gobierna sola». Los bucles actúan de verdad, pero sobre unos
+  pocos servicios con límites duros y con un presupuesto de centavos por hora.
 - ✓ «Estos son los bucles que una nube autónoma necesitaría: predecir, fijar
   precios, cooperar, reparar, evolucionar, diseñar. Así se ve cada uno en su
   forma más pequeña, y aquí es donde el código le dice que no al modelo».
@@ -256,8 +304,11 @@ que funciona:
    política decide. Compara lo que el modelo *dice* de la latencia con lo que
    el código *mide*.
 4. **La nube actúa (10 min).** «Activar actuación»: el primer ciclo crea los
-   nodos en Cloud Run (tarda unos 30 s). El tráfico de los móviles es la
-   demanda; mira cómo Holt la predice y la política enciende instancias.
+   nodos y los servicios de los agentes en Cloud Run (unos 30 s). El tráfico
+   de los móviles es la demanda: Holt la predice, la política enciende
+   instancias y los agentes del mercado real se la disputan. Señala la tabla
+   del mercado: quién vende, a qué latencia real, cuánto cuesta de verdad y
+   quién paga una instancia caliente sin que le convenga.
 5. **La falla real (10 min).** Cuando la pista diga «Listo para una falla
    real», pulsa «caída» en un nodo. Cuenta en voz alta: unos 30 s hasta que el
    detector la ve, unos 20 s más hasta que Cloud Run despliega la revisión sana.
@@ -286,6 +337,7 @@ app/
 │       ├── evolution.py Algoritmo genético y dinámica del replicador
 │       ├── topology.py  Evaluación, TopologyPolicy y búsqueda evolutiva
 │       ├── infra.py     Plan de acciones y ActuationPolicy
+│       ├── real_market.py  Precios, genoma, subasta, liquidación y evolución del mercado real
 │       ├── predicates.py  Qué puede preguntar la sala y quién lo resuelve
 │       └── simulation.py  El tick, las fallas y el juez de los mercados
 ├── application/         Casos de uso y los puertos que necesitan.
@@ -293,6 +345,7 @@ app/
 │   ├── cloud.py         CloudService: correr, pausar, fallas, topologías, juez
 │   ├── infra.py         InfraController: observar, predecir, sondear, reparar, actuar
 │   ├── judges.py        Juez compuesto: simulación o infraestructura real
+│   ├── real_market.py   RealMarket: subasta la demanda real, envía trabajo, liquida, coaliciones, evolución
 │   ├── limits.py        Límites de ritmo contra abuso
 │   ├── ports.py         OracleGateway, Repository, SimulationJudge, TopologyGenerator
 │   ├── views.py         Lo que sale de un caso de uso (dicts planos)
@@ -301,7 +354,8 @@ app/
 │   ├── memory.py        Repository en memoria, con lock
 │   ├── google_auth.py   Credenciales por defecto y tokens de identidad
 │   ├── vertex_client.py generateContent, compartido
-│   ├── infra/           Nodos: Cloud Run (Admin API v2) y nube de ensayo
+│   ├── infra/           Nodos y agentes: Cloud Run (Admin API v2) y nube de ensayo
+│   ├── prices.py        Precios de Cloud Run: catálogo de Cloud Billing o foto fija
 │   ├── topology/        Generadores de topologías: Vertex AI y simulado
 │   └── oracle/
 │       ├── gemini.py    Ruta común: run → inject_fault → interpret → política
@@ -309,7 +363,7 @@ app/
 │       └── mock.py      Simulado, con la misma forma de respuesta
 ├── entrypoints/http/    FastAPI: rutas, esquemas, clave de ponente y estáticos
 │   └── static/          Tres pantallas con su JS aparte (CSP sin scripts en línea)
-├── node.py            El nodo real: /salud, con NODO_FALLA para inyectar fallas
+├── node.py            El nodo real: /salud (con NODO_FALLA) y /trabajo, lo que venden los agentes
 ├── config.py            Settings: el único que lee el entorno; falla cerrado en producción
 ├── seeds.py             Juegos de preguntas (SEED_SET)
 └── main.py              Raíz de composición: conecta las capas
@@ -328,9 +382,9 @@ capas:
 
 | Carpeta | Qué prueba | Cómo |
 | --- | --- | --- |
-| `tests/domain/` | LMSR, entidades, políticas, cada técnica de la nube y la simulación entera | Python puro, sin dobles, semillas fijas |
-| `tests/application/` | Casos de uso y el controlador de infraestructura: crear, escalar, reparar, vigilia | Oráculo, generadores y nube de ensayo falsos, reloj controlado |
-| `tests/adapters/` | Lectura de grounding, cada fallo inyectado, qué pediría a la Admin API de Cloud Run | Payloads de `generateContent`; peticiones grabadas, sin red |
+| `tests/domain/` | LMSR, entidades, políticas, cada técnica de la nube, la simulación entera y la economía del mercado real (redondeo a 100 ms, plazo, reposo, tope de calientes) | Python puro, sin dobles, semillas fijas, precios de la foto del catálogo |
+| `tests/application/` | Casos de uso, el controlador de infraestructura (crear, escalar, reparar, vigilia) y el mercado real (topes de costo, contratos, generaciones, apagado) | Oráculo, generadores y nube de ensayo falsos, reloj controlado |
+| `tests/adapters/` | Lectura de grounding, cada fallo inyectado, qué pediría a la Admin API de Cloud Run, y la lectura del catálogo de precios | Payloads de `generateContent`, peticiones grabadas y SKUs reales guardados en `fixtures/`, sin red |
 | `tests/entrypoints/` | API de punta a punta, incluidas las rutas `/api/infra` y su clave | `TestClient` con el oráculo simulado y la nube de ensayo |
 | `tests/security/` | Cada control de [SECURITY.md](SECURITY.md): rutas sin autenticación, suplantación, cabeceras, CSP, scripts en línea, arranque inseguro, límites | Recorre las rutas de la app y los archivos estáticos |
 | `tests/test_docs.py` | Que `docs/ARQUITECTURA.md` coincida con los `.mmd` y que los enlaces locales existan | Sin red |
@@ -492,14 +546,25 @@ crear el proyecto `oraculo-6d1578`.
 | API `oraculo-api` | Solo mientras atiende peticiones | Facturación por petición (`--cpu-throttling`) y escala a cero (`--min-instances 0`) |
 | Bucle de infraestructura | Nunca por sí solo | No hay bucle de fondo: corre dentro de las consultas de `/nube.html`, cada 10 s, solo mientras alguien mira |
 | Nodos `oraculo-nodo-*` | Las instancias mínimas cobran aunque nadie las use | ¼ de vCPU y 256 MiB; 2 instancias mínimas en total como máximo; los nodos sin demanda quedan en cero |
-| Nodos olvidados | Si la API duerme, los nodos siguen ahí | Vigilia: Cloud Scheduler llama a `/api/infra/vigilia` cada 15 min y, si nadie miró la proyección en 30 min, borra todos los nodos |
+| Agentes `oraculo-agente-*` | Solo las peticiones que atienden, y la instancia mínima si su gen `warm` está activo | Sin instancia mínima por defecto; como mucho 1 agente caliente (0,45 centavos por hora en us-east1); 12 peticiones de trabajo por ciclo (≈ 1 µUSD cada una) |
+| Nodos y agentes olvidados | Si la API duerme, siguen ahí | Vigilia: Cloud Scheduler llama a `/api/infra/vigilia` cada 15 min y, si nadie miró la proyección en 30 min, borra todos los nodos y agentes |
 | Gemini | Por llamada | Solo cuando el ponente pide una topología o resuelve una pregunta del oráculo |
 | Imágenes | Almacenamiento | Política de limpieza: se conservan las 3 más recientes |
 | Todo el proyecto | — | Presupuesto de 10 USD/mes con alertas al 50, 90 y 100 %. **Un presupuesto alerta, no corta**: el freno son la vigilia y la política |
 
 Con la escala a cero, el estado del mercado se pierde cuando la API duerme. En
-una charla no pasa, porque los móviles la mantienen despierta. Si quieres
-blindarlo, sube `--min-instances 1` solo durante la charla.
+una charla no pasa, porque los móviles la mantienen despierta.
+
+**Durante la charla, sube a `--min-instances 1`.** Con mínimo 0 y máximo 1, las
+peticiones que llegan mientras la única instancia arranca en frío reciben un
+429 de Cloud Run, antes de llegar a la app. Pasó en una prueba: ocho peticiones
+a la vez justo después de desplegar. Cuesta unos 1,4 centavos por hora (1 vCPU
+y 512 MiB en reposo):
+
+```bash
+gcloud run services update oraculo-api --region us-east1 --min-instances 1   # antes de empezar
+gcloud run services update oraculo-api --region us-east1 --min-instances 0   # al terminar
+```
 
 ### Una sola vez: proyecto, APIs e identidades
 

@@ -211,11 +211,11 @@ async function pintarInfra(puedeControlar) {
   infraActiva = v.active;
   const real = v.mode === "real";
   document.getElementById("honesto").textContent = real
-    ? "La topología adoptada, el autoescalado y la reparación actúan sobre servicios reales de Cloud Run, " +
-      "con límites duros. Precios, coaliciones y evolución de agentes siguen simulados: Google Cloud no tiene " +
-      "un mercado donde los agentes se vendan cómputo entre sí."
+    ? "Real sobre Cloud Run, con límites duros: la topología adoptada, el autoescalado, la reparación y el mercado " +
+      "real (agentes con servicios propios, precios del catálogo de Cloud Billing, coaliciones que se ejecutan y " +
+      "evolución con ganancia medida). La simulación de doce agentes de abajo sigue siendo un laboratorio."
     : `Infraestructura en modo ${v.mode}: ${v.mode === "plan" ? "Cloud Run valida cada acción sin aplicarla" :
-       "nube de ensayo en memoria"}. Precios, coaliciones y evolución siguen simulados.`;
+       "nube de ensayo en memoria, con precios reales de una foto del catálogo"}. Nada cobra.`;
   texto("infra-que", `Modo ${v.mode} (${v.gateway}) · actuación ${v.active ? "ACTIVA" : "en pausa"} · ` +
     `último ciclo ${hora(v.last_cycle)} · límites: ${v.policy.max_services} servicios, ` +
     `${v.policy.max_total_min} instancias mínimas en total, ${v.policy.max_max_per_region} máximas por región, ` +
@@ -228,6 +228,7 @@ async function pintarInfra(puedeControlar) {
   texto("infra-pista", pistaInfra(v));
   document.getElementById("guia-real").hidden = false;
   document.getElementById("guia-apagar").hidden = false;
+  document.getElementById("guia-mercado").hidden = !v.market;
 
   lineas(document.getElementById("g-demanda-real"), {
     x: v.rps.map(r => hora(r.t)),
@@ -278,6 +279,54 @@ async function pintarInfra(puedeControlar) {
     li(inc, [span(`falla activa: ${f.kind} en ${f.region} desde ${hora(f.at)}`, "no")]);
   }
   if (!v.incidents.length && !v.faults.length) li(inc, [span("Sin incidentes reales.", "tenue")]);
+  pintarMercado(v);
+}
+
+// Montos reales minúsculos: en millonésimas de dólar se leen mejor.
+const micro = usd => usd == null ? "—" : `${(usd * 1e6).toFixed(2)} µUSD`;
+
+function pintarMercado(v) {
+  const m = v.market;
+  const caja = document.getElementById("mercado");
+  caja.hidden = !m;
+  if (!m) return;
+  const p = m.prices;
+  texto("mercado-pista", m.error ? "El mercado no puede operar: " + m.error
+    : !v.active ? "Actuación en pausa: los agentes no tienen servicios ni venden nada."
+    : !m.cycles ? "Creando los servicios de los agentes en Cloud Run (unos 30 s). Sin instancia mínima no cuestan nada."
+    : `Generación ${m.generation}, ciclo ${m.cycles}. Abre la página de audiencia: su tráfico es lo que se vende.`);
+  texto("mercado-resumen", p ? `Precios: ${p.source}${p.fetched_at ? " (" + hora(p.fetched_at) + ")" : ""} · ` +
+    `una petición en us-east1 cuesta ${micro(p.request_cost["us-east1"])} · una hora caliente, ` +
+    `${(p.warm_hour["us-east1"] * 100).toFixed(2)} centavos · gasto real del mercado: ${micro(m.spend_usd)} · ` +
+    `tope: ${m.budget.max_requests} peticiones por ciclo, ${m.budget.max_warm} agente(s) caliente(s)` : "Sin precios todavía.");
+  tabla(document.getElementById("mercado-agentes"),
+    ["agente", "región", "caliente", "margen", "pide", "a tiempo · tarde · error", "p50", "ingreso", "costo real", "ganancia"],
+    m.agents.map(a => [
+      `${a.id} · g${a.born}`, a.region,
+      `${a.genome.warm ? "sí" : "no"}${a.service && a.service.warm !== a.genome.warm ? " (aplicando)" : ""}`,
+      a.markup.toFixed(2), micro(a.ask_usd), `${a.served} · ${a.late} · ${a.failed}`,
+      a.p50_ms == null ? "—" : `${a.p50_ms} ms`, micro(a.revenue_usd), micro(a.cost_usd), micro(a.profit_usd),
+    ]));
+  const l = document.getElementById("mercado-intercambios");
+  l.replaceChildren();
+  for (const t of m.trades.slice(0, 4)) {
+    const vendidas = Object.values(t.fills).reduce((x, y) => x + y, 0);
+    const quien = Object.entries(t.fills).map(([k, n]) => `${k}×${n}`).join(" ");
+    li(l, [span(`${hora(t.at)} `, "tenue"),
+      span(`demanda real ${t.demand} → vendidas ${vendidas}${t.demand > vendidas ? " (tope de costo)" : ""}`),
+      span(` a ${micro(t.price)} · ${quien}`, "tenue")]);
+  }
+  for (const c of m.contracts.slice(0, 3)) {
+    li(l, [span(`${hora(c.at)} contrato de ${c.qty} en dos regiones: `), span(c.detail,
+      c.fulfilled ? "si" : c.fulfilled === false ? "no" : "pendiente")]);
+  }
+  if (!m.trades.length && !m.contracts.length) li(l, [span("Sin intercambios todavía.", "tenue")]);
+  const g = document.getElementById("mercado-generaciones");
+  g.replaceChildren();
+  for (const x of m.generations.slice().reverse()) {
+    li(g, [span(`generación ${x.number}: `), span(`${Math.round(x.warm_share * 100)} % calientes · mejor ${x.best}`, "tenue")]);
+  }
+  if (!m.generations.length) li(g, [span(`La primera generación cierra a los ${m.budget.generation_cycles} ciclos.`, "tenue")]);
 }
 
 document.getElementById("infra").addEventListener("click", async e => {

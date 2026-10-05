@@ -33,6 +33,7 @@ from ..domain.cloud.predicates import REAL
 from ..domain.errors import SimulationError
 from ..domain.verdict import Verdict
 from .ports import NodeGateway
+from .real_market import RealMarket
 
 log = logging.getLogger("oraculo.infra")
 
@@ -93,7 +94,8 @@ class InfraController:
 
     def __init__(self, gateway: NodeGateway, topology: Callable[[], dict[str, int]], mode: str,
                  policy: ActuationPolicy | None = None, rps_per_instance: float = 10.0,
-                 interval: float = 10.0, clock: Callable[[], float] = time.time, ttl: float = 1800.0):
+                 interval: float = 10.0, clock: Callable[[], float] = time.time, ttl: float = 1800.0,
+                 market: RealMarket | None = None):
         self.gateway = gateway
         self.topology = topology
         self.mode = mode
@@ -102,6 +104,7 @@ class InfraController:
         self.interval = interval
         self.clock = clock
         self.ttl = ttl
+        self.market = market  # agentes reales que venden peticiones reales; comparte frenos con los nodos
         # Un proceso recién arrancado asume que nadie mira: si Cloud Scheduler lo despierta
         # para la vigilia, borra los nodos que quedaron de una sesión anterior.
         self.last_seen = clock() - ttl
@@ -152,6 +155,9 @@ class InfraController:
             self.state.notes += notes
             why = f"topología adoptada y demanda prevista de {forecast:.1f} req/s"
             await self._execute(plan(desired, self.state.actual, why) + repairs, now)
+            if self.market:
+                # La demanda real de este ciclo: la predicción en req/s por la duración del ciclo.
+                await self.market.cycle(int(round(forecast * self.interval)), self.active)
             self.state.last_cycle = now
 
     async def _probe_and_detect(self, now: float) -> list[Action]:
@@ -244,10 +250,13 @@ class InfraController:
                 self.state.faults.append(RealFault(len(self.state.faults) + 1, region, kind, now))
 
     async def shutdown(self) -> None:
-        """Interruptor de emergencia: pausa la actuación y borra todos los nodos."""
+        """Interruptor de emergencia: pausa la actuación y borra todos los nodos y agentes."""
         async with self._lock:
             self.active = False
             now = self.clock()
+            if self.market:
+                for line in await self.market.shutdown():
+                    self.state.notes.append(f"agente {line}")
             for region, st in self.state.actual.items():
                 if st.exists:
                     entry = LogEntry(now, Action("borrar", region, reason="apagado de emergencia"), True,
@@ -279,6 +288,8 @@ class InfraController:
         except Exception as exc:
             return {"apagado": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
         had = [r for r, n in self.state.actual.items() if n.exists]
+        if self.market and await self.market.exists():
+            had.append("agentes del mercado real")
         if had:
             await self.shutdown()
         return {"apagado": bool(had), "nodos": had, "inactivo_s": round(idle), "ttl_s": self.ttl}
@@ -354,4 +365,5 @@ class InfraController:
                 for i in st.incidents
             ][::-1],
             "fault_kinds": NODE_FAULTS,
+            "market": self.market.view(detailed) if self.market else None,
         }

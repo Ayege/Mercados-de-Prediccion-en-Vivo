@@ -20,6 +20,8 @@ C4Component
     Component(actuacion, "ActuationPolicy", "domain/cloud/infra.py", "Regiones, topes de instancias, ritmo de cambios; recorta y revisa")
     Component(gwrun, "Adaptador Cloud Run", "adapters/infra/cloudrun.py", "Admin API v2; solo oraculo-nodo-* con etiqueta propia")
     Component(gwfake, "Nube de ensayo", "adapters/infra/fake.py", "Se comporta como Cloud Run, en memoria")
+    Component(mercado, "Mercado real", "application/real_market.py", "Subasta demanda real, envía trabajo, liquida con costos reales, coaliciones, evolución")
+    Component(precios, "Precios", "adapters/prices.py", "Catálogo de Cloud Billing; foto fija para ensayar")
   }
 
   System_Ext(cloudrun, "Cloud Run", "Nodos reales")
@@ -48,6 +50,9 @@ C4Component
   Rel(http, infra, "Ciclo, fallas, apagado, vigilia")
   Rel(infra, nube, "Lee la topología adoptada")
   Rel(infra, actuacion, "Recorta el deseo y revisa cada acción")
+  Rel(infra, mercado, "Corre en el mismo ciclo, con la misma activación")
+  Rel(mercado, precios, "Costos reales")
+  Rel(mercado, gwrun, "Servicios de agentes y trabajo real")
   Rel(gwrun, puertos, "Implementa NodeGateway")
   Rel(gwfake, puertos, "Implementa NodeGateway")
   Rel(gwrun, cloudrun, "Crea, escala, repara, borra; sondea", "HTTPS")

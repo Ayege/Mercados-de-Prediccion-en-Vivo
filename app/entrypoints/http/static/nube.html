@@ -44,12 +44,17 @@
       <li><strong>Iniciar</strong> pone a correr la simulación: un tick por segundo, una generación cada 24 ticks.</li>
       <li><strong>Pedir al modelo</strong> o <strong>Búsqueda evolutiva</strong> proponen una topología. La política la
         acepta o la rechaza con sus razones; si la acepta y es mejor que la actual, se adopta.</li>
-      <li><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios. Mira cuánto tarda el detector.</li>
+      <li><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios del laboratorio. Mira cuánto tarda el
+        detector.</li>
       <li id="guia-real" hidden><strong>Activar actuación</strong> despliega la topología adoptada como servicios reales
         de Cloud Run. La sala genera la demanda abriendo la página de audiencia. Cuando un nodo tenga 5 sondeos,
         inyecta una falla real y cronometra la reparación.</li>
-      <li id="guia-apagar" hidden>Al terminar, <strong>Apagar todo</strong>. Si lo olvidas, la vigilia borra los nodos
-        cuando nadie mira esta página durante 30 minutos.</li>
+      <li id="guia-mercado" hidden>Con la actuación activa, el <strong>mercado real</strong> crea un servicio por agente
+        (unos 30 s) y empieza a vender el tráfico de la sala: hasta 12 peticiones reales cada 10 s, con costos del
+        catálogo de Cloud Billing. Cada 6 ciclos hay un contrato de dos regiones; cada 12, una generación. Mira quién
+        paga una instancia caliente y si le conviene.</li>
+      <li id="guia-apagar" hidden>Al terminar, <strong>Apagar todo</strong>: borra nodos y agentes. Si lo olvidas, la
+        vigilia los borra cuando nadie mira esta página durante 30 minutos.</li>
       <li>Las preguntas de la sala sobre la nube se resuelven desde <a href="proyeccion.html" id="enlace-proyeccion">la
         proyección del mercado</a>.</li>
     </ol>
@@ -96,23 +101,37 @@
     </div>
   </article>
 
+  <article class="tarjeta" id="mercado" hidden style="margin-bottom:1rem">
+    <h2>Mercado real</h2>
+    <p class="que">Cada agente opera su propio servicio de Cloud Run y vende peticiones reales de la sala. Sus costos
+      son precios de lista del catálogo de Cloud Billing; solo cobra lo que atiende a tiempo. El gen «caliente» paga una
+      instancia mínima para evitar arranques en frío; la evolución decide si vale la pena con la ganancia real.</p>
+    <p class="pista" id="mercado-pista"></p>
+    <p class="pequeno" id="mercado-resumen"></p>
+    <div class="tabla" id="mercado-agentes"></div>
+    <div class="rejilla-tarjetas" style="margin-top:.6rem">
+      <div><strong class="pequeno">Subastas y contratos</strong><ul class="lista" id="mercado-intercambios"></ul></div>
+      <div><strong class="pequeno">Generaciones</strong><ul class="lista" id="mercado-generaciones"></ul></div>
+    </div>
+  </article>
+
   <div class="rejilla-tarjetas">
     <article class="tarjeta">
-      <h2>Predecir la demanda</h2>
+      <h2>Predecir la demanda <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Holt-Winters aditivo con ciclo de 24 ticks, comparado con el pronóstico ingenuo
         («igual que hace un ciclo»). Si no le gana a eso, no sirve.</p>
       <div id="g-demanda"></div>
     </article>
 
     <article class="tarjeta">
-      <h2>Fijar precios</h2>
+      <h2>Fijar precios <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Subasta de precio uniforme por recurso. Cada agente ajusta su margen con Q-learning tabular
         según la escasez prevista. El subastador es central: este mercado <em>no</em> es descentralizado.</p>
       <div id="g-precios"></div>
     </article>
 
     <article class="tarjeta">
-      <h2>Evolucionar</h2>
+      <h2>Evolucionar <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Cada 24 ticks, selección por torneo, cruce y mutación reemplazan al 75 % peor. La línea de
         texto compara con lo que predice la dinámica del replicador.</p>
       <div id="g-estrategias"></div>
@@ -121,7 +140,7 @@
     </article>
 
     <article class="tarjeta">
-      <h2>Formar coaliciones</h2>
+      <h2>Formar coaliciones <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Contratos que ningún agente cubre solo y que exigen dos regiones. Los dispuestos se
         coaligan y reparten la ganancia por valor de Shapley exacto.</p>
       <p class="pequeno" id="coaliciones-resumen"></p>
@@ -129,7 +148,7 @@
     </article>
 
     <article class="tarjeta">
-      <h2>Detectar y reparar</h2>
+      <h2>Detectar y reparar <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Detector EWMA con z-score sobre la latencia de cada nodo y el error de predicción. No sabe qué
         falla inyectaste. Remedia drenando y reemplazando el nodo; el reemplazo tarda 3–7 ticks y a veces sale defectuoso.</p>
       <ul class="lista" id="incidentes"></ul>

@@ -12,7 +12,8 @@ flowchart LR
 
   vertex["<b>Vertex AI</b><br/><i>[Sistema externo]</i><br/>Gemini: veredictos con grounding<br/>y propuestas de topología."]
   fuentes["<b>Fuentes primarias</b><br/><i>[Sistema externo]</i><br/>Releases, bancos centrales,<br/>registros oficiales."]
-  cloudrun["<b>Cloud Run</b><br/><i>[Sistema externo]</i><br/>Nodos oraculo-nodo-REGIÓN que el<br/>controlador crea, escala, repara y borra."]
+  cloudrun["<b>Cloud Run</b><br/><i>[Sistema externo]</i><br/>Nodos de la topología y servicios de<br/>los agentes del mercado real."]
+  billing["<b>Cloud Billing</b><br/><i>[Sistema externo]</i><br/>Catálogo público de precios<br/>de Cloud Run por región."]
   secretos["<b>Secret Manager</b><br/><i>[Sistema externo]</i><br/>Guarda la clave de ponente."]
   scheduler["<b>Cloud Scheduler</b><br/><i>[Sistema externo]</i><br/>Vigilia cada 15 min con un<br/>token OIDC firmado por Google."]
   build["<b>Cloud Build</b><br/><i>[Sistema externo]</i><br/>Compuertas: secretos, bandit,<br/>pip-audit, pruebas, Trivy."]
@@ -21,7 +22,8 @@ flowchart LR
   ponente -- "Opera la demo<br/><i>HTTPS + X-Presenter-Key</i>" --> oraculo
   oraculo -- "Pregunta y pide topologías<br/><i>HTTPS, ADC</i>" --> vertex
   vertex -- "Busca evidencia<br/><i>grounding</i>" --> fuentes
-  oraculo -- "Admin API v2 y sondeos<br/><i>ADC, tokens de identidad</i>" --> cloudrun
+  oraculo -- "Despliega, escala, repara;<br/>envía trabajo real<br/><i>Admin API v2, tokens de identidad</i>" --> cloudrun
+  oraculo -- "Lee precios reales<br/><i>Catalog API, cache 1 h</i>" --> billing
   oraculo -- "Lee la clave al arrancar" --> secretos
   scheduler -- "POST /api/infra/vigilia<br/><i>OIDC</i>" --> oraculo
   build -- "Despliega si todo pasa" --> oraculo
@@ -31,4 +33,4 @@ flowchart LR
   classDef externo fill:#8c8c8c,stroke:#6b6b6b,color:#fff
   class publico,ponente persona
   class oraculo sistema
-  class vertex,fuentes,cloudrun,secretos,scheduler,build externo
+  class vertex,fuentes,cloudrun,billing,secretos,scheduler,build externo

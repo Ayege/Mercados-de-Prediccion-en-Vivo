@@ -12,16 +12,19 @@ Defensa en profundidad, además de `ActuationPolicy`:
 """
 from __future__ import annotations
 
+import re
 import time
 
 import httpx
 
 from ...domain.cloud.catalog import REGIONS
 from ...domain.cloud.infra import NODE_FAULTS, NODE_PREFIX, NodeState, Probe, service_name
+from ...domain.cloud.real_market import AGENT_PREFIX, CPU, AgentState, WorkResult, agent_service
 from ..google_auth import AccessToken, id_token
 
 BASE = "https://run.googleapis.com/v2"
 LABELS = {"oraculo-demo": "true", "oraculo-rol": "nodo"}
+AGENT_LABELS = {"oraculo-demo": "true", "oraculo-rol": "agente"}
 HEALTHY = "ninguna"
 
 
@@ -174,3 +177,87 @@ class CloudRunNodeGateway:
             return Probe(None, None, type(exc).__name__)
         ms = (time.perf_counter() - start) * 1000
         return Probe(ms if r.status_code == 200 else None, r.status_code)
+
+    # --- agentes del mercado real ----------------------------------------------------
+    AGENT_ID = re.compile(r"^r\d{1,2}$")
+
+    def _agent_url(self, agent_id: str, region: str) -> str:
+        if not self.AGENT_ID.match(agent_id):
+            raise ValueError(f"identificador de agente no permitido: {agent_id}")
+        return f"{self._parent(region)}/{agent_service(agent_id)}"
+
+    def _agent_template(self, agent_id: str, region: str, warm: bool) -> dict:
+        t = self._template(region, 1 if warm else 0, 1, None)
+        t["labels"] = AGENT_LABELS
+        t["containers"][0]["env"].append({"name": "AGENTE_ID", "value": agent_id})
+        t["containers"][0]["resources"]["limits"]["cpu"] = str(CPU)
+        return t
+
+    async def list_agents(self) -> dict[str, AgentState]:
+        out = {}
+        for region in REGIONS:
+            r = await self._request("GET", self._parent(region))
+            self._ok(r)
+            for svc in r.json().get("services", []):
+                labels = svc.get("labels") or {}
+                if labels.get("oraculo-demo") != "true" or labels.get("oraculo-rol") != "agente":
+                    continue  # no es nuestro: ni se lista ni se toca
+                agent_id = svc["name"].rsplit("/", 1)[-1].removeprefix(AGENT_PREFIX)
+                if not self.AGENT_ID.match(agent_id):
+                    continue
+                st = self._state(region, svc)
+                out[agent_id] = AgentState(agent_id, region, st.ready, st.reconciling, st.uri,
+                                           st.min_instances >= 1, st.revision)
+        return out
+
+    async def ensure_agent(self, agent_id: str, region: str, warm: bool) -> str:
+        url = self._agent_url(agent_id, region)
+        r = await self._request("GET", url)
+        if r.status_code == 404:
+            body = {"labels": AGENT_LABELS, "ingress": "INGRESS_TRAFFIC_ALL",
+                    "template": self._agent_template(agent_id, region, warm)}
+            params = {"serviceId": agent_service(agent_id)}
+            r = await self._request("POST", self._parent(region), params=params, json=body)
+            self._ok(r)
+            return "validado por Cloud Run" if self.validate_only else "creación solicitada"
+        self._ok(r)
+        svc = r.json()
+        if (svc.get("labels") or {}).get("oraculo-rol") != "agente":
+            raise RuntimeError(f"{agent_service(agent_id)} existe pero no es de esta demo")
+        body = {"labels": AGENT_LABELS, "template": self._agent_template(agent_id, region, warm),
+                "etag": svc.get("etag")}
+        r = await self._request("PATCH", url, json=body)
+        self._ok(r)
+        return "validado por Cloud Run" if self.validate_only else "revisión nueva solicitada"
+
+    async def delete_agent(self, agent_id: str, region: str) -> str:
+        url = self._agent_url(agent_id, region)
+        r = await self._request("GET", url)
+        if r.status_code == 404 or (r.json().get("labels") or {}).get("oraculo-rol") != "agente":
+            return "no existía"
+        r = await self._request("DELETE", url)
+        self._ok(r)
+        return "validado por Cloud Run" if self.validate_only else "borrado solicitado"
+
+    async def work(self, state: AgentState, n: int) -> list[WorkResult]:
+        """Peticiones reales de trabajo, una tras otra (el nodo tiene concurrencia 1)."""
+        if not state.uri or n <= 0:
+            return []
+        try:
+            token = await id_token(state.uri)
+        except Exception:  # noqa: BLE001 — sin token no hay trabajo que medir
+            return [WorkResult(None, None, 401)] * n
+        out = []
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            for _ in range(n):
+                start = time.perf_counter()
+                try:
+                    headers = {"Authorization": f"Bearer {token}"}
+                    r = await client.get(f"{state.uri}/trabajo", headers=headers)
+                except httpx.HTTPError:
+                    out.append(WorkResult(None, None, None))
+                    continue
+                ms = (time.perf_counter() - start) * 1000
+                server = r.json().get("server_ms") if r.status_code == 200 else None
+                out.append(WorkResult(ms, server, r.status_code))
+        return out

@@ -14,7 +14,8 @@ C4Deployment
     }
     Deployment_Node(run, "Cloud Run") {
       Container(api, "oraculo-api", "FastAPI", "Facturación por petición, min 0, max 1; sin /api/docs en producción")
-      Container(nodo, "oraculo-nodo-*", "FastAPI mínima", "Privados; ¼ vCPU; solo si el ponente activa la actuación")
+      Container(nodo, "oraculo-nodo-*", "FastAPI mínima", "Topología; privados; ¼ vCPU; solo si el ponente activa la actuación")
+      Container(agente, "oraculo-agente-r*", "FastAPI mínima", "Mercado real; privados; ¼ vCPU; mínimo 0 salvo el gen warm (máximo 1)")
     }
     Deployment_Node(iam, "IAM y secretos") {
       Container(sarun, "oraculo-run", "identidad de la API", "aiplatform.user, run.developer, run.invoker; lectura del repo y del secreto")
@@ -25,6 +26,7 @@ C4Deployment
     Deployment_Node(costo, "Límites de costo") {
       Container(vigilia, "Cloud Scheduler", "oraculo-vigilia", "Cada 15 min")
       Container(budget, "Presupuesto", "10 USD/mes", "Alertas al 50, 90 y 100 %; no corta el gasto")
+      Container(topes, "MarketBudget y ActuationPolicy", "en código", "12 peticiones por ciclo, 1 agente caliente, 2 mínimos en nodos")
     }
   }
 
@@ -32,6 +34,7 @@ C4Deployment
   Rel(pipe, imagen, "push solo si Trivy pasa")
   Rel(imagen, api, "gcloud run deploy")
   Rel(api, nodo, "Crea y repara", "Admin API v2")
+  Rel(api, agente, "Crea, ajusta warm, envía trabajo", "Admin API v2, token de identidad")
   Rel(api, sarun, "actúa como")
   Rel(nodo, sanodo, "actúa como")
   Rel(vigilia, savig, "firma como")

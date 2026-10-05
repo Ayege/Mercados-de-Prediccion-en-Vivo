@@ -9,6 +9,7 @@ from .adapters.infra.fake import FakeNodeGateway
 from .adapters.memory import InMemoryRepository
 from .adapters.oracle.mock import MockOracle
 from .adapters.oracle.vertex import VertexOracle
+from .adapters.prices import CloudBillingPrices, FixedPrices
 from .adapters.topology.mock import MockTopologyGenerator
 from .adapters.topology.vertex import VertexTopologyGenerator
 from .adapters.vertex_client import VertexClient
@@ -16,9 +17,11 @@ from .application.cloud import CloudService
 from .application.infra import InfraController
 from .application.judges import CompositeJudge
 from .application.ports import OracleGateway, TopologyGenerator
+from .application.real_market import RealMarket
 from .application.service import MarketService
 from .config import Settings
 from .domain.cloud.infra import ActuationPolicy
+from .domain.cloud.real_market import MarketBudget
 from .domain.cloud.simulation import Simulation
 from .domain.verdict import AcceptancePolicy, CensusPolicy
 from .entrypoints.http.api import create_app
@@ -50,6 +53,7 @@ def build_infra(settings: Settings, cloud: CloudService) -> InfraController | No
         return None
     if mode == "ensayo":
         gateway = FakeNodeGateway()
+        prices = FixedPrices()
     elif mode in ("plan", "real"):
         required = {"GOOGLE_CLOUD_PROJECT": settings.project, "NODO_IMAGEN": settings.node_image,
                     "NODO_CUENTA": settings.node_service_account}
@@ -58,13 +62,18 @@ def build_infra(settings: Settings, cloud: CloudService) -> InfraController | No
             raise RuntimeError(f"INFRA_MODE={mode} necesita {', '.join(missing)}")
         gateway = CloudRunNodeGateway(settings.project, settings.node_image,
                                       settings.node_service_account, validate_only=mode == "plan")
+        prices = CloudBillingPrices(settings.project)
     else:
         raise RuntimeError(f"INFRA_MODE desconocido: {mode} (apagado | ensayo | plan | real)")
     policy = ActuationPolicy(max_total_min=settings.infra_max_total_min,
                              max_max_per_region=settings.infra_max_per_region,
                              max_services=settings.infra_max_services)
+    budget = MarketBudget(max_agents=settings.market_agents, max_warm=settings.market_max_warm,
+                          max_requests=settings.market_max_requests)
+    market = RealMarket(gateway, prices, budget, cycle_seconds=settings.infra_interval)
     return InfraController(gateway, lambda: dict(cloud.sim.topology), mode, policy,
-                           settings.rps_per_instance, settings.infra_interval, ttl=settings.infra_ttl)
+                           settings.rps_per_instance, settings.infra_interval, ttl=settings.infra_ttl,
+                           market=market)
 
 
 def build_service(settings: Settings, oracle: OracleGateway | None = None,

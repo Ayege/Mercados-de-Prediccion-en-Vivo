@@ -1,4 +1,4 @@
-# Lo que NO se sube a Cloud Build. tests/ sí se sube: el pipeline corre las pruebas antes de construir.
+# Lo que NO se sube a Cloud Build. tests/ y docs/ sí se suben: el pipeline verifica ambos antes de construir.
 .gcloudignore
 .git
 .gitignore
@@ -12,4 +12,3 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
-docs/

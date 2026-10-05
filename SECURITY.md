@@ -29,7 +29,8 @@ servicios `oraculo-nodo-*` (ver el README).
 | **S**uplantación | Alguien se hace pasar por Cloud Scheduler para llamar a la vigilia | Token OIDC firmado por Google; se verifican firma, expiración, audiencia y cuenta `oraculo-vigilia` | `test_scheduler_can_only_call_the_vigil_with_a_valid_oidc_token` |
 | **T**ampering | Una ruta de escritura nueva queda sin autenticación | Toda ruta `POST` exige la clave de ponente salvo una lista blanca de tres rutas de la audiencia | `test_every_write_route_requires_the_presenter_unless_it_is_an_audience_write` |
 | **T**ampering | Gemini propone algo inválido o inyectado desde una página web | El modelo es un componente no confiable: `AcceptancePolicy` y `TopologyPolicy` deciden, fail-closed | `tests/domain/test_policy.py`, `test_infra_policy.py` |
-| **T**ampering | El controlador toca un servicio que no es suyo | Solo nombres `oraculo-nodo-*`, solo regiones del catálogo, solo servicios con la etiqueta `oraculo-demo=true`; validaciones con excepciones, no `assert` | `tests/adapters/test_cloudrun.py` |
+| **T**ampering | El controlador toca un servicio que no es suyo | Solo nombres `oraculo-nodo-*` y `oraculo-agente-r<n>`, solo regiones del catálogo, solo servicios con la etiqueta `oraculo-demo=true` y el rol correcto; validaciones con excepciones, no `assert` | `tests/adapters/test_cloudrun.py` |
+| **T**ampering | Precios manipulados o incompletos alteran las decisiones del mercado | Los precios vienen del catálogo oficial de Cloud Billing por HTTPS con identidad de Google; si falta un precio, el mercado no opera (fail-closed) | `test_incomplete_catalog_fails_closed` |
 | **T**ampering | Dependencia o imagen base alterada | `requirements.lock` con hashes e instalación `--require-hashes`; base fijada por digest; `APP_MODULE` en lista blanca | `pip-audit --require-hashes` en pre-commit y pipeline |
 | **R**epudio | No saber quién activó la actuación o qué hizo la política | Cada decisión de `ActuationPolicy` queda en el registro con su razón; Cloud Run registra cada petición | Vista del ponente en `/nube.html` |
 | **I**nformation disclosure | La vista pública revela el proyecto, las cuentas y los permisos | `GET /api/infra` sin clave oculta los mensajes de error internos | `test_public_view_hides_internal_errors` |
@@ -37,6 +38,7 @@ servicios `oraculo-nodo-*` (ver el README).
 | **I**nformation disclosure | Reconocimiento de la API | `/api/docs` y `/openapi.json` cerrados en producción | `test_api_docs_are_closed_in_production` |
 | **I**nformation disclosure | La clave de ponente en variables o en el job | Secret Manager, con `secretAccessor` solo para `oraculo-run`; el job usa OIDC; la clave viaja en el fragmento `#` de la URL, que el navegador no envía | Verificado en producción |
 | **D**enegación de servicio (económica) | Alguien consulta `/api/infra` sin parar para que la vigilia nunca apague los nodos | Solo el ponente cuenta como «alguien mira» y mueve el ciclo; los topes de `ActuationPolicy` limitan el gasto máximo | `test_public_infra_view_neither_keeps_nodes_alive_nor_runs_the_controller` |
+| **D**enegación de servicio (económica) | Mucho tráfico hace que el mercado real envíe mucho trabajo pagado | `MarketBudget`: 12 peticiones de trabajo por ciclo sin importar la demanda, 1 agente caliente como máximo, 4 agentes; el ciclo solo corre mientras el ponente mira | `test_auction_never_sells_more_than_the_cost_cap`, `test_warm_budget_holds_in_real_services` |
 | **D**enegación de servicio | Agotar la memoria de la única instancia o saturar las órdenes | Tope de 2000 cuentas, 120 entradas por minuto, 10 órdenes por persona cada 10 s, esquemas con longitudes máximas | `test_orders_are_rate_limited_per_person` |
 | **E**levación de privilegios | XSS en las pantallas proyectadas | Escape de todo dato en `innerHTML`; `textContent` para datos externos; CSP `script-src 'self'`; sin scripts ni manejadores en línea; sin `eval` | `test_pages_have_no_inline_scripts_or_handlers`, `test_scripts_do_not_use_dynamic_code`, `test_security_headers_everywhere` |
 | **E**levación de privilegios | Un nodo comprometido ataca la cuenta | Los nodos corren como `oraculo-nodo`, sin ningún rol | IAM |
@@ -80,6 +82,9 @@ que protegen en una demo de 40 minutos:
 - **Estilos en línea.** La CSP permite `style-src 'unsafe-inline'` porque los
   gráficos SVG lo usan. Inyectar estilo es mucho menos grave que inyectar
   script, que sí está prohibido.
+- **Arranque en frío con una sola instancia.** Con `min-instances 0` y `max 1`,
+  una ráfaga al arrancar recibe 429 de Cloud Run. Es disponibilidad, no
+  integridad; durante la charla se sube a `min-instances 1`.
 - **El presupuesto no corta el gasto.** Solo alerta. Los frenos reales son
   `ActuationPolicy`, la escala a cero y la vigilia.
 - **Sin WAF ni Cloud Armor.** La API está detrás del frontend de Google. Para

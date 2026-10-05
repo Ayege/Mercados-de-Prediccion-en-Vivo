@@ -8,13 +8,15 @@ C4Container
     Container(web, "Pantallas", "HTML y JavaScript sin scripts en línea", "/, /proyeccion.html, /nube.html; CSP script-src 'self'")
     Container(api, "oraculo-api", "FastAPI en Cloud Run", "Controles de borde, mercado, simulación y controlador; escala a cero, máximo 1")
     ContainerDb(estado, "Estado", "Memoria del proceso", "Mercados, cuentas (solo hashes de tokens) y simulación")
-    Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Solo /salud; corren como oraculo-nodo, sin roles")
+    Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Topología desplegada: /salud; corren como oraculo-nodo, sin roles")
+    Container(agentes, "oraculo-agente-<id>", "Cloud Run privado, ¼ vCPU", "Mercado real: /trabajo; mínimo 0, o 1 si el gen warm lo pide")
     ContainerDb(secreto, "Secret Manager", "oraculo-presenter-key", "Solo oraculo-run puede leerlo")
     Container_Ext(scheduler, "Cloud Scheduler", "Job oraculo-vigilia", "Firma con la cuenta oraculo-vigilia, sin roles")
     Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Solo imágenes que pasaron Trivy; se conservan 3")
   }
 
   System_Ext(vertex, "Vertex AI", "Gemini")
+  System_Ext(billing, "Cloud Billing", "Catálogo de precios")
 
   Rel(publico, web, "Apuesta; su tráfico es la demanda", "HTTPS + token de usuario")
   Rel(ponente, web, "Controla", "HTTPS + clave de ponente")
@@ -23,8 +25,11 @@ C4Container
   Rel(api, secreto, "PRESENTER_KEY", "secretAccessor")
   Rel(api, vertex, "Veredictos y topologías", "ADC, sin llaves")
   Rel(api, nodos, "Crea, escala, repara, borra; sondea", "Admin API v2, token de identidad")
+  Rel(api, agentes, "Crea, ajusta warm; vende trabajo real", "Admin API v2, token de identidad")
+  Rel(api, billing, "Precios por región", "Catalog API")
   Rel(scheduler, api, "Vigilia", "OIDC verificado por la app")
   Rel(registry, nodos, "Imagen")
+  Rel(registry, agentes, "Imagen")
   Rel(registry, api, "Imagen")
 
   UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

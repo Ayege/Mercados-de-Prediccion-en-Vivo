@@ -10,6 +10,7 @@ from dataclasses import replace
 
 from ...domain.cloud.catalog import REGIONS
 from ...domain.cloud.infra import NODE_FAULTS, NodeState, Probe
+from ...domain.cloud.real_market import AgentState, WorkResult
 
 
 class FakeNodeGateway:
@@ -21,6 +22,9 @@ class FakeNodeGateway:
         self.nodes: dict[str, NodeState] = {}
         self.pending: dict[str, int] = {}
         self.calls: list[tuple[str, str]] = []
+        self.agents: dict[str, AgentState] = {}
+        self.agent_pending: dict[str, int] = {}
+        self.cold: dict[str, bool] = {}  # sin instancia mínima, la primera petición arranca en frío
 
     def _check(self, region: str) -> None:
         if region not in REGIONS:
@@ -76,3 +80,45 @@ class FakeNodeGateway:
             return Probe(None, 503)
         base = 40 + self.rng.gauss(0, 4)
         return Probe(base + (600 if n.fault == "latencia" else 0), 200)
+
+    # --- agentes del mercado real ----------------------------------------------------
+    async def list_agents(self) -> dict[str, AgentState]:
+        for agent_id, a in self.agents.items():
+            left = self.agent_pending.get(agent_id, 0)
+            a.reconciling, a.ready = left > 0, left == 0
+            self.agent_pending[agent_id] = max(0, left - 1)
+        return {k: replace(a) for k, a in self.agents.items()}
+
+    async def ensure_agent(self, agent_id: str, region: str, warm: bool) -> str:
+        self._check(region)
+        self.calls.append(("agente", agent_id))
+        a = self.agents.get(agent_id)
+        if a is None:
+            self.agents[agent_id] = AgentState(agent_id, region, uri=f"https://ensayo/{agent_id}", warm=warm,
+                                               revision="r1")
+        else:
+            a.warm, a.revision = warm, f"r{int((a.revision or 'r0')[1:]) + 1}"
+        self.agent_pending[agent_id] = self.settle
+        self.cold[agent_id] = not warm
+        return "agente listo (ensayo)"
+
+    async def delete_agent(self, agent_id: str, region: str) -> str:
+        self.calls.append(("borrar agente", agent_id))
+        self.agents.pop(agent_id, None)
+        return "borrado (ensayo)"
+
+    async def work(self, state: AgentState, n: int) -> list[WorkResult]:
+        a = self.agents.get(state.id)
+        if a is None:
+            return [WorkResult(None, None, None)] * n
+        out = []
+        for _ in range(n):
+            server = 5 + abs(self.rng.gauss(0, 1))
+            latency = 40 + server + self.rng.gauss(0, 4)
+            if not a.warm and self.cold.get(state.id, True):
+                latency += 1400  # arranque en frío: más de lo que tolera el plazo de 1 s
+                self.cold[state.id] = False
+            out.append(WorkResult(latency, server, 200))
+        if not a.warm:
+            self.cold[state.id] = self.rng.random() < 0.5  # sin tráfico, la instancia se apaga
+        return out

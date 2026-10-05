@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from ..domain.cloud.infra import NodeState, Probe
+from ..domain.cloud.real_market import AgentState, PriceTable, WorkResult
 from ..domain.cloud.topology import Draft
 from ..domain.market import Account, Market
 from ..domain.verdict import Verdict
@@ -88,3 +89,26 @@ class NodeGateway(Protocol):
     async def delete(self, region: str) -> str: ...
 
     async def probe(self, state: NodeState) -> Probe: ...
+
+
+class PriceCatalog(Protocol):
+    """Precios de lista de Cloud Run por región. Contrato: lanza si no puede obtenerlos."""
+
+    async def get(self) -> PriceTable: ...
+
+
+class AgentGateway(Protocol):
+    """Servicios `oraculo-agente-<id>`, uno por agente del mercado real.
+
+    Contrato: solo toca servicios con ese prefijo y la etiqueta de la demo.
+    """
+
+    name: str
+
+    async def list_agents(self) -> dict[str, AgentState]: ...
+
+    async def ensure_agent(self, agent_id: str, region: str, warm: bool) -> str: ...
+
+    async def delete_agent(self, agent_id: str, region: str) -> str: ...
+
+    async def work(self, state: AgentState, n: int) -> list[WorkResult]: ...

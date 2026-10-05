@@ -37,7 +37,8 @@ flowchart LR
 
   vertex["<b>Vertex AI</b><br/><i>[Sistema externo]</i><br/>Gemini: veredictos con grounding<br/>y propuestas de topología."]
   fuentes["<b>Fuentes primarias</b><br/><i>[Sistema externo]</i><br/>Releases, bancos centrales,<br/>registros oficiales."]
-  cloudrun["<b>Cloud Run</b><br/><i>[Sistema externo]</i><br/>Nodos oraculo-nodo-REGIÓN que el<br/>controlador crea, escala, repara y borra."]
+  cloudrun["<b>Cloud Run</b><br/><i>[Sistema externo]</i><br/>Nodos de la topología y servicios de<br/>los agentes del mercado real."]
+  billing["<b>Cloud Billing</b><br/><i>[Sistema externo]</i><br/>Catálogo público de precios<br/>de Cloud Run por región."]
   secretos["<b>Secret Manager</b><br/><i>[Sistema externo]</i><br/>Guarda la clave de ponente."]
   scheduler["<b>Cloud Scheduler</b><br/><i>[Sistema externo]</i><br/>Vigilia cada 15 min con un<br/>token OIDC firmado por Google."]
   build["<b>Cloud Build</b><br/><i>[Sistema externo]</i><br/>Compuertas: secretos, bandit,<br/>pip-audit, pruebas, Trivy."]
@@ -46,7 +47,8 @@ flowchart LR
   ponente -- "Opera la demo<br/><i>HTTPS + X-Presenter-Key</i>" --> oraculo
   oraculo -- "Pregunta y pide topologías<br/><i>HTTPS, ADC</i>" --> vertex
   vertex -- "Busca evidencia<br/><i>grounding</i>" --> fuentes
-  oraculo -- "Admin API v2 y sondeos<br/><i>ADC, tokens de identidad</i>" --> cloudrun
+  oraculo -- "Despliega, escala, repara;<br/>envía trabajo real<br/><i>Admin API v2, tokens de identidad</i>" --> cloudrun
+  oraculo -- "Lee precios reales<br/><i>Catalog API, cache 1 h</i>" --> billing
   oraculo -- "Lee la clave al arrancar" --> secretos
   scheduler -- "POST /api/infra/vigilia<br/><i>OIDC</i>" --> oraculo
   build -- "Despliega si todo pasa" --> oraculo
@@ -56,13 +58,16 @@ flowchart LR
   classDef externo fill:#8c8c8c,stroke:#6b6b6b,color:#fff
   class publico,ponente persona
   class oraculo sistema
-  class vertex,fuentes,cloudrun,secretos,scheduler,build externo
+  class vertex,fuentes,cloudrun,billing,secretos,scheduler,build externo
 ```
 <!-- /mmd -->
 
 </details>
 
-Lo esencial está en el centro: **el modelo propone y el código dispone**.
+Lo esencial está en el centro: **el modelo propone y el código dispone**. Lo
+real es real de punta a punta: la topología se despliega, la demanda son los
+móviles de la sala, los costos vienen del catálogo de Cloud Billing y las
+latencias se miden. Solo el laboratorio de doce agentes es simulado.
 Gemini propone veredictos y topologías; nada llega a la audiencia ni a Cloud
 Run sin pasar por una política escrita en Python.
 
@@ -83,13 +88,15 @@ C4Container
     Container(web, "Pantallas", "HTML y JavaScript sin scripts en línea", "/, /proyeccion.html, /nube.html; CSP script-src 'self'")
     Container(api, "oraculo-api", "FastAPI en Cloud Run", "Controles de borde, mercado, simulación y controlador; escala a cero, máximo 1")
     ContainerDb(estado, "Estado", "Memoria del proceso", "Mercados, cuentas (solo hashes de tokens) y simulación")
-    Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Solo /salud; corren como oraculo-nodo, sin roles")
+    Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Topología desplegada: /salud; corren como oraculo-nodo, sin roles")
+    Container(agentes, "oraculo-agente-<id>", "Cloud Run privado, ¼ vCPU", "Mercado real: /trabajo; mínimo 0, o 1 si el gen warm lo pide")
     ContainerDb(secreto, "Secret Manager", "oraculo-presenter-key", "Solo oraculo-run puede leerlo")
     Container_Ext(scheduler, "Cloud Scheduler", "Job oraculo-vigilia", "Firma con la cuenta oraculo-vigilia, sin roles")
     Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Solo imágenes que pasaron Trivy; se conservan 3")
   }
 
   System_Ext(vertex, "Vertex AI", "Gemini")
+  System_Ext(billing, "Cloud Billing", "Catálogo de precios")
 
   Rel(publico, web, "Apuesta; su tráfico es la demanda", "HTTPS + token de usuario")
   Rel(ponente, web, "Controla", "HTTPS + clave de ponente")
@@ -98,8 +105,11 @@ C4Container
   Rel(api, secreto, "PRESENTER_KEY", "secretAccessor")
   Rel(api, vertex, "Veredictos y topologías", "ADC, sin llaves")
   Rel(api, nodos, "Crea, escala, repara, borra; sondea", "Admin API v2, token de identidad")
+  Rel(api, agentes, "Crea, ajusta warm; vende trabajo real", "Admin API v2, token de identidad")
+  Rel(api, billing, "Precios por región", "Catalog API")
   Rel(scheduler, api, "Vigilia", "OIDC verificado por la app")
   Rel(registry, nodos, "Imagen")
+  Rel(registry, agentes, "Imagen")
   Rel(registry, api, "Imagen")
 
   UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
@@ -110,8 +120,10 @@ C4Container
 | --- | --- |
 | `oraculo-api` | Una sola instancia (`max 1`) porque el estado vive en memoria; escala a cero y cobra por petición |
 | `oraculo-nodo-<región>` | La misma imagen con `APP_MODULE=app.node:app`; privados (requieren token de identidad); ¼ de vCPU |
+| `oraculo-agente-<id>` | La misma imagen; cada agente del mercado real opera uno. Sin instancia mínima salvo que su gen `warm` la pague; atiende `/trabajo` |
 | Secret Manager | La única credencial propia es la clave de ponente; todo lo demás usa identidades de Google (ADC, OIDC) |
-| Cloud Scheduler | La vigilia: el único gasto que no se apaga solo son los nodos olvidados |
+| Cloud Scheduler | La vigilia: el único gasto que no se apaga solo son los nodos y agentes olvidados |
+| Cloud Billing | Solo lectura del catálogo público de precios; sin datos de la cuenta |
 
 ## 3. Componentes de `oraculo-api`
 
@@ -142,6 +154,8 @@ C4Component
     Component(actuacion, "ActuationPolicy", "domain/cloud/infra.py", "Regiones, topes de instancias, ritmo de cambios; recorta y revisa")
     Component(gwrun, "Adaptador Cloud Run", "adapters/infra/cloudrun.py", "Admin API v2; solo oraculo-nodo-* con etiqueta propia")
     Component(gwfake, "Nube de ensayo", "adapters/infra/fake.py", "Se comporta como Cloud Run, en memoria")
+    Component(mercado, "Mercado real", "application/real_market.py", "Subasta demanda real, envía trabajo, liquida con costos reales, coaliciones, evolución")
+    Component(precios, "Precios", "adapters/prices.py", "Catálogo de Cloud Billing; foto fija para ensayar")
   }
 
   System_Ext(cloudrun, "Cloud Run", "Nodos reales")
@@ -170,6 +184,9 @@ C4Component
   Rel(http, infra, "Ciclo, fallas, apagado, vigilia")
   Rel(infra, nube, "Lee la topología adoptada")
   Rel(infra, actuacion, "Recorta el deseo y revisa cada acción")
+  Rel(infra, mercado, "Corre en el mismo ciclo, con la misma activación")
+  Rel(mercado, precios, "Costos reales")
+  Rel(mercado, gwrun, "Servicios de agentes y trabajo real")
   Rel(gwrun, puertos, "Implementa NodeGateway")
   Rel(gwfake, puertos, "Implementa NodeGateway")
   Rel(gwrun, cloudrun, "Crea, escala, repara, borra; sondea", "HTTPS")
@@ -180,9 +197,9 @@ C4Component
 
 | Capa | Contiene | Puede importar |
 | --- | --- | --- |
-| `domain/` | Mercado, LMSR, políticas (`AcceptancePolicy`, `CensusPolicy`, `TopologyPolicy`, `ActuationPolicy`), simulación | solo `domain` |
-| `application/` | Casos de uso, puertos, límites de abuso, controlador de infraestructura | `domain` |
-| `adapters/` | Vertex AI, Cloud Run, repositorio en memoria, nube de ensayo | `domain`, `application` |
+| `domain/` | Mercado de la sala, LMSR, políticas (`AcceptancePolicy`, `CensusPolicy`, `TopologyPolicy`, `ActuationPolicy`), economía del mercado real (`PriceTable`, `MarketBudget`, genoma, liquidación), laboratorio simulado | solo `domain` |
+| `application/` | Casos de uso, puertos, límites de abuso, controlador de infraestructura y `RealMarket` | `domain` |
+| `adapters/` | Vertex AI, Cloud Run (nodos y agentes), catálogo de Cloud Billing, repositorio en memoria, nube de ensayo | `domain`, `application` |
 | `entrypoints/http/` | FastAPI, esquemas, controles de borde, pantallas | `domain`, `application` |
 | `main.py`, `config.py` | Raíz de composición: lee el entorno, falla cerrado y conecta todo | todo |
 
@@ -208,7 +225,8 @@ C4Deployment
     }
     Deployment_Node(run, "Cloud Run") {
       Container(api, "oraculo-api", "FastAPI", "Facturación por petición, min 0, max 1; sin /api/docs en producción")
-      Container(nodo, "oraculo-nodo-*", "FastAPI mínima", "Privados; ¼ vCPU; solo si el ponente activa la actuación")
+      Container(nodo, "oraculo-nodo-*", "FastAPI mínima", "Topología; privados; ¼ vCPU; solo si el ponente activa la actuación")
+      Container(agente, "oraculo-agente-r*", "FastAPI mínima", "Mercado real; privados; ¼ vCPU; mínimo 0 salvo el gen warm (máximo 1)")
     }
     Deployment_Node(iam, "IAM y secretos") {
       Container(sarun, "oraculo-run", "identidad de la API", "aiplatform.user, run.developer, run.invoker; lectura del repo y del secreto")
@@ -219,6 +237,7 @@ C4Deployment
     Deployment_Node(costo, "Límites de costo") {
       Container(vigilia, "Cloud Scheduler", "oraculo-vigilia", "Cada 15 min")
       Container(budget, "Presupuesto", "10 USD/mes", "Alertas al 50, 90 y 100 %; no corta el gasto")
+      Container(topes, "MarketBudget y ActuationPolicy", "en código", "12 peticiones por ciclo, 1 agente caliente, 2 mínimos en nodos")
     }
   }
 
@@ -226,6 +245,7 @@ C4Deployment
   Rel(pipe, imagen, "push solo si Trivy pasa")
   Rel(imagen, api, "gcloud run deploy")
   Rel(api, nodo, "Crea y repara", "Admin API v2")
+  Rel(api, agente, "Crea, ajusta warm, envía trabajo", "Admin API v2, token de identidad")
   Rel(api, sarun, "actúa como")
   Rel(nodo, sanodo, "actúa como")
   Rel(vigilia, savig, "firma como")
@@ -269,6 +289,29 @@ sequenceDiagram
   end
 ```
 
+### Un ciclo del mercado real
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as InfraController
+  participant M as RealMarket
+  participant B as Cloud Billing
+  participant CR as Cloud Run
+  participant A as oraculo-agente-r1
+  C->>M: demanda real del ciclo (req/s predichos × 10 s)
+  M->>B: precios de lista por región (cache 1 h)
+  M->>CR: listar oraculo-agente-* y corregir instancia mínima según el gen warm
+  M->>M: subasta: hasta 12 peticiones al precio de equilibrio
+  loop cada petición vendida
+    M->>A: GET /trabajo (token de identidad)
+    A-->>M: 200 en N ms (o arranque en frío)
+  end
+  M->>M: ingreso solo si ≤ 1 s · costo real de cada petición y del reposo
+  M->>M: Q-learning con la ganancia real · cada 12 ciclos, selección y mutación
+  Note over M,A: Medido: 14 ms en us-east1, 55 en us-central1, 111 en europe-west1, 138 en southamerica-east1 · 0,05 centavos en 5 min
+```
+
 ### Falla real y autorreparación
 
 ```mermaid
@@ -302,7 +345,8 @@ sequenceDiagram
 | Cloud Scheduler → API | Vigilia | Token OIDC firmado por Google: firma, audiencia y cuenta | `google_auth.py`, `api.py` |
 | Navegador | HTML y JS propios | CSP `script-src 'self'`, sin scripts en línea, sin `eval` | `api.py`, `static/` |
 | API → Gemini | Respuestas del modelo | Dato no confiable: `AcceptancePolicy` y `TopologyPolicy` | `domain/` |
-| API → Cloud Run | Acciones sobre la cuenta | `ActuationPolicy`; solo `oraculo-nodo-*` con etiqueta propia; identidad con permisos mínimos | `domain/cloud/infra.py`, `adapters/infra/cloudrun.py` |
+| API → Cloud Run | Acciones sobre la cuenta | `ActuationPolicy` y `MarketBudget`; solo `oraculo-nodo-*` y `oraculo-agente-r<n>` con etiqueta y rol propios; identidad con permisos mínimos | `domain/cloud/infra.py`, `domain/cloud/real_market.py`, `adapters/infra/cloudrun.py` |
+| API → Cloud Billing | Precios que deciden el mercado | API oficial por HTTPS; si falta un precio, el mercado no opera; sin `x-goog-user-project`, para no pedir un permiso más | `adapters/prices.py` |
 | Código → imagen | Dependencias y sistema base | Lock con hashes, base por digest, Trivy, pip-audit | `requirements.lock`, `Dockerfile`, `cloudbuild.yaml` |
 
 ## 7. Regenerar los diagramas

@@ -5,7 +5,9 @@ estado ni importa nada del resto de la app. `NODO_FALLA` simula la falla que el
 ponente inyecta, y una revisión nueva sin ella la repara.
 """
 import asyncio
+import hashlib
 import os
+import time
 
 from fastapi import FastAPI, Response
 
@@ -22,3 +24,17 @@ async def salud(response: Response) -> dict:
     if fault == "latencia":
         await asyncio.sleep(0.6)
     return {"ok": True, "region": os.getenv("NODO_REGION", ""), "revision": os.getenv("K_REVISION", "local")}
+
+
+@app.get("/trabajo")
+async def trabajo(response: Response) -> dict:
+    """Una unidad de trabajo real y pequeña: lo que los agentes del mercado venden."""
+    if os.getenv("NODO_FALLA") == "caida":
+        response.status_code = 503
+        return {"ok": False}
+    start = time.perf_counter()
+    digest = b"oraculo"
+    for _ in range(2000):  # unos pocos milisegundos de CPU real
+        digest = hashlib.sha256(digest).digest()
+    elapsed = round((time.perf_counter() - start) * 1000, 2)
+    return {"ok": True, "agente": os.getenv("AGENTE_ID", ""), "server_ms": elapsed}
