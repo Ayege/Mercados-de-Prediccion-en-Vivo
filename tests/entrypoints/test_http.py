@@ -2,13 +2,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.main import build, build_service
+from app.main import build, build_cloud, build_infra, build_service
 
 
 def app_with(with_seed=False, **overrides):
     settings = Settings.from_env()
     settings = Settings(**{**settings.__dict__, "oracle_cooldown": 0, "backend": "mock", **overrides})
-    return TestClient(build(settings, build_service(settings), with_seed=with_seed))
+    cloud = build_cloud(settings)
+    infra = build_infra(settings, cloud)
+    service = build_service(settings, cloud=cloud, infra=infra)
+    return TestClient(build(settings, service, cloud, infra, with_seed=with_seed))
 
 
 @pytest.fixture()
@@ -24,10 +27,28 @@ def new_market(client):
     return r.json()["id"]
 
 
+def token(client, user):
+    """Entra una vez por nombre y guarda el token, como hace el navegador."""
+    tokens = client.__dict__.setdefault("tokens", {})
+    if user.lower() not in tokens:
+        r = client.post("/api/entrar", json={"name": user})
+        assert r.status_code == 201, r.text
+        tokens[user.lower()] = r.json()["token"]
+    return tokens[user.lower()]
+
+
 def trade(client, mid, user, outcome, amount):
-    return client.post(
-        f"/api/markets/{mid}/trade", json={"user": user, "outcome": outcome, "amount": amount}
-    )
+    return client.post(f"/api/markets/{mid}/trade", json={"user": user, "outcome": outcome, "amount": amount},
+                       headers={"X-User-Token": token(client, user)})
+
+
+def census(client, mid, user, answer):
+    return client.post(f"/api/markets/{mid}/census", json={"user": user, "answer": answer},
+                       headers={"X-User-Token": token(client, user)})
+
+
+def balance(client, user):
+    return client.get(f"/api/users/{user}", headers={"X-User-Token": token(client, user)}).json()["balance"]
 
 
 def test_trade_moves_price_and_balance(client):
@@ -49,8 +70,8 @@ def test_resolution_pays_winners(client, monkeypatch):
     trade(client, mid, "bob", "NO", 100)
     m = client.post(f"/api/markets/{mid}/resolve").json()
     assert m["status"] == "resolved" and m["outcome"] == "YES"
-    assert client.get("/api/users/aye").json()["balance"] == pytest.approx(900 + shares)
-    assert client.get("/api/users/bob").json()["balance"] == pytest.approx(900)
+    assert balance(client, "aye") == pytest.approx(900 + shares)
+    assert balance(client, "bob") == pytest.approx(900)
 
 
 def test_unresolved_keeps_market_open(client, monkeypatch):
@@ -123,8 +144,7 @@ def test_unknown_fault_is_422(client):
 def test_census_resolves_room_market(client):
     mid = sala_market(client)
     for i, answer in enumerate([True, True, True, False, False, True]):
-        assert client.post(f"/api/markets/{mid}/census",
-                           json={"user": f"u{i}", "answer": answer}).status_code == 200
+        assert census(client, mid, f"u{i}", answer).status_code == 200
     m = client.post(f"/api/markets/{mid}/resolve").json()
     assert m["status"] == "resolved" and m["outcome"] == "YES"
     assert m["oracle"]["model"] == "censo"
@@ -132,27 +152,27 @@ def test_census_resolves_room_market(client):
 
 def test_census_below_minimum_stays_open(client):
     mid = sala_market(client)
-    client.post(f"/api/markets/{mid}/census", json={"user": "aye", "answer": True})
+    census(client, mid, "aye", True)
     m = client.post(f"/api/markets/{mid}/resolve").json()
     assert m["status"] == "open" and m["oracle"]["outcome"] == "UNRESOLVED"
 
 
 def test_census_is_one_answer_per_person(client):
     mid = sala_market(client)
-    client.post(f"/api/markets/{mid}/census", json={"user": "aye", "answer": True})
-    r = client.post(f"/api/markets/{mid}/census", json={"user": "AYE", "answer": False})
+    census(client, mid, "aye", True)
+    r = census(client, mid, "AYE", False)
     assert r.status_code == 400
 
 
 def test_census_rejected_on_oracle_market(client):
     mid = new_market(client)
-    r = client.post(f"/api/markets/{mid}/census", json={"user": "aye", "answer": True})
+    r = census(client, mid, "aye", True)
     assert r.status_code == 400
 
 
 def test_census_answers_are_not_exposed(client):
     mid = sala_market(client)
-    client.post(f"/api/markets/{mid}/census", json={"user": "aye", "answer": True})
+    census(client, mid, "aye", True)
     m = client.get(f"/api/markets/{mid}").json()
     assert m["census_count"] == 1 and "census" not in m
 
@@ -183,3 +203,101 @@ def test_oracle_seed_set_has_one_unresolvable_question(monkeypatch):
     monkeypatch.setenv("SEED_SET", "oraculo")
     c = app_with(with_seed=True)
     assert sorted(m["kind"] for m in c.get("/api/markets").json()) == ["futuro", "presente", "presente"]
+
+
+# --- nube simulada ---------------------------------------------------------------
+
+
+def test_cloud_view_is_public_and_controls_are_guarded(monkeypatch):
+    monkeypatch.setenv("PRESENTER_KEY", "k")
+    c = app_with()
+    assert c.get("/api/nube").json()["tick"] == 0
+    assert c.post("/api/nube/avanzar", params={"n": 5}).status_code == 403
+    assert c.post("/api/nube/fallas", json={"kind": "caida_nodo"}).status_code == 403
+    assert c.post("/api/nube/topologias", params={"fuente": "evolutivo"}).status_code == 403
+    v = c.post("/api/nube/avanzar", params={"n": 5}, headers={"X-Presenter-Key": "k"}).json()
+    assert v["tick"] == 5
+
+
+def test_cloud_rejects_unknown_fault_and_source(client):
+    assert client.post("/api/nube/fallas", json={"kind": "meteorito"}).status_code == 422
+    assert client.post("/api/nube/topologias", params={"fuente": "x"}).status_code == 422
+
+
+def test_simulation_market_needs_a_known_predicate(client):
+    body = {"question": "¿Pregunta de la nube?", "criteria": "La resuelve la simulación.",
+            "kind": "simulacion"}
+    assert client.post("/api/markets", json=body).status_code == 400
+    assert client.post("/api/markets", json=body | {"predicate": "inventado"}).status_code == 400
+    assert client.post("/api/markets", json=body | {"predicate": "topologia_llm"}).status_code == 201
+
+
+def test_simulation_market_resolves_from_the_simulation(client):
+    body = {"question": "¿Pasará la topología?", "criteria": "La resuelve la simulación.",
+            "kind": "simulacion", "predicate": "topologia_llm"}
+    mid = client.post("/api/markets", json=body).json()["id"]
+    first = client.post(f"/api/markets/{mid}/resolve").json()
+    assert first["status"] == "open" and first["oracle"]["model"] == "simulación"
+    client.post("/api/nube/topologias", params={"fuente": "generativo"})  # el simulado acierta primero
+    m = client.post(f"/api/markets/{mid}/resolve").json()
+    assert m["status"] == "resolved" and m["outcome"] == "YES"
+
+
+def test_nube_seed_set_is_all_simulation_markets(monkeypatch):
+    monkeypatch.setenv("SEED_SET", "nube")
+    c = app_with(with_seed=True)
+    assert {m["kind"] for m in c.get("/api/markets").json()} == {"simulacion"}
+
+
+# --- infraestructura real --------------------------------------------------------
+
+
+def test_infra_is_off_by_default(client):
+    assert client.get("/api/infra").json() == {"mode": "apagado"}
+    assert client.post("/api/infra/actuar", params={"activo": True}).status_code == 409
+
+
+def test_rehearsal_infra_is_guarded_and_counts_demand(monkeypatch):
+    monkeypatch.setenv("INFRA_MODE", "ensayo")
+    monkeypatch.setenv("PRESENTER_KEY", "k")
+    c = app_with()
+    assert c.get("/api/infra").json()["mode"] == "ensayo"
+    for path in ("/api/infra/ciclo", "/api/infra/apagar"):
+        assert c.post(path).status_code == 403
+    assert c.post("/api/infra/actuar", params={"activo": True}).status_code == 403
+    c.get("/api/markets")
+    v = c.post("/api/infra/ciclo", headers={"X-Presenter-Key": "k"}).json()
+    assert v["rps"][-1]["real"] > 0
+
+
+def test_real_mode_refuses_to_start_without_its_settings(monkeypatch):
+    monkeypatch.setenv("INFRA_MODE", "real")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "")
+    with pytest.raises(RuntimeError, match="NODO_IMAGEN"):
+        app_with()
+
+
+def test_real_predicate_is_unresolved_when_infra_is_off(client):
+    body = {"question": "¿Se reparará el nodo real?", "criteria": "Lo resuelve la infraestructura.",
+            "kind": "simulacion", "predicate": "autorreparacion_real"}
+    mid = client.post("/api/markets", json=body).json()["id"]
+    m = client.post(f"/api/markets/{mid}/resolve").json()
+    assert m["status"] == "open" and "apagada" in m["oracle"]["trace"][-1]
+
+
+def test_vigil_is_guarded(monkeypatch):
+    monkeypatch.setenv("INFRA_MODE", "ensayo")
+    monkeypatch.setenv("PRESENTER_KEY", "k")
+    c = app_with()
+    assert c.post("/api/infra/vigilia").status_code == 403
+    assert c.post("/api/infra/vigilia", headers={"X-Presenter-Key": "k"}).json()["apagado"] is False
+
+
+def test_info_and_markets_say_who_resolves(monkeypatch):
+    monkeypatch.setenv("INFRA_MODE", "ensayo")
+    monkeypatch.setenv("SEED_SET", "nube_real")
+    c = app_with(with_seed=True)
+    assert c.get("/api/info").json()["infra"] == "ensayo"
+    resolvers = {m["predicate"]: m["resolver"] for m in c.get("/api/markets").json()}
+    assert resolvers["autorreparacion_real"] == "infraestructura real"
+    assert resolvers["cooperacion_g5"] == "simulación"

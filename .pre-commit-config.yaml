@@ -1,0 +1,38 @@
+# Seguridad desplazada a la izquierda: estos controles corren antes de cada commit,
+# y los mismos corren otra vez en cloudbuild.yaml antes de construir la imagen.
+# Instalar una vez:  pre-commit install
+# Correr a mano:     pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: check-yaml
+
+  - repo: https://github.com/gitleaks/gitleaks  # secretos en el código o en el historial
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit  # incluye las reglas S de bandit
+    rev: v0.7.0
+    hooks:
+      - id: ruff
+
+  - repo: local
+    hooks:
+      - id: pruebas-de-seguridad
+        name: pruebas de seguridad y arquitectura
+        entry: .venv/bin/pytest -q tests/security tests/test_architecture.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pip-audit
+        name: vulnerabilidades conocidas en dependencias
+        entry: .venv/bin/pip-audit --require-hashes -r requirements.lock
+        language: system
+        pass_filenames: false
+        files: ^requirements

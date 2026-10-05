@@ -39,6 +39,32 @@ ROLLBACK = (
     "Censo privado de la sala: SÍ si más del 50% de quienes respondan dice que sí.",
     "sala",
 )
+# Preguntas sobre la nube simulada: comportamiento emergente que resuelve el código.
+COOPERACION = (
+    "¿Al cerrar la generación 5, más del 40 % de los agentes será cooperativo?",
+    "Lo resuelve la simulación: proporción de agentes con cooperación ≥ 0.6 al cerrar la generación 5.",
+    "simulacion",
+    "cooperacion_g5",
+)
+AUTORREPARACION = (
+    "¿La primera caída de nodo quedará reparada en menos de 6 ticks?",
+    "Lo resuelve la simulación: ticks entre la caída y el reemplazo sano del nodo.",
+    "simulacion",
+    "autorreparacion",
+)
+TOPOLOGIA = (
+    "¿La primera topología que proponga el modelo generativo pasará la política?",
+    "Lo resuelve la simulación: presupuesto, 2 regiones, disponibilidad 99,99 %, latencia ≤ 75 ms.",
+    "simulacion",
+    "topologia_llm",
+)
+AUTORREPARACION_REAL = (
+    "¿La primera falla en un nodo real de Cloud Run se reparará sola en menos de 2 minutos?",
+    "Lo resuelve el controlador de infraestructura: segundos entre la falla inyectada y el primer "
+    "sondeo sano después del reemplazo.",
+    "simulacion",
+    "autorreparacion_real",
+)
 SEEDS = {
     # Charla sobre el oráculo: creencia contra evidencia, y el sistema negándose a responder.
     "oraculo": [KUBERNETES, PYTHON, DOLAR],
@@ -46,6 +72,10 @@ SEEDS = {
     "agregacion": [VIERNES, LLM, ROLLBACK],
     # Un ejemplo de cada tipo.
     "mixta": [PYTHON, DOLAR, VIERNES],
+    # La nube autónoma: la sala apuesta sobre lo que harán los agentes.
+    "nube": [COOPERACION, AUTORREPARACION, TOPOLOGIA],
+    # La nube autónoma actuando sobre Cloud Run de verdad (INFRA_MODE=real).
+    "nube_real": [COOPERACION, TOPOLOGIA, AUTORREPARACION_REAL],
 }
 
 
@@ -53,5 +83,5 @@ def seed(service: MarketService, seed_set: str) -> None:
     # Todos abren en 50 %: si el precio se mueve, lo movió la sala, no la casa.
     if seed_set not in SEEDS:
         raise ValueError(f"SEED_SET desconocido: {seed_set} (opciones: {', '.join(SEEDS)})")
-    for question, criteria, kind in SEEDS[seed_set]:
-        service.create(question, criteria, kind=kind)
+    for question, criteria, kind, *predicate in SEEDS[seed_set]:
+        service.create(question, criteria, kind=kind, predicate=predicate[0] if predicate else None)

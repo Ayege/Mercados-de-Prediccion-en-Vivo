@@ -19,6 +19,22 @@ class Settings:
     starting_balance: float = 1000.0
     oracle_cooldown: float = 30.0
     revision: str = "local"
+    sim_seed: int = 7
+    sim_agents: int = 12
+    tick_seconds: float = 1.0
+    infra_mode: str = "apagado"  # apagado | ensayo | plan | real
+    node_image: str = ""
+    node_service_account: str = ""
+    rps_per_instance: float = 10.0
+    infra_interval: float = 10.0
+    infra_max_total_min: int = 2
+    infra_max_per_region: int = 2
+    infra_max_services: int = 3
+    infra_ttl: float = 1800.0
+    production: bool = False  # True en Cloud Run (K_SERVICE): se exigen los controles
+    api_docs: bool = True
+    vigil_account: str = ""  # cuenta de servicio de Cloud Scheduler, para verificar su OIDC
+    vigil_audience: str = ""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -34,7 +50,32 @@ class Settings:
             seed_set=env.get("SEED_SET", "oraculo"),
             presenter_key=env.get("PRESENTER_KEY", ""),
             revision=env.get("K_REVISION", "local"),
+            sim_seed=int(env.get("SIM_SEED", "7")),
+            sim_agents=int(env.get("SIM_AGENTS", "12")),
+            tick_seconds=float(env.get("SIM_TICK_SECONDS", "1.0")),
+            infra_mode=env.get("INFRA_MODE", "apagado"),
+            node_image=env.get("NODO_IMAGEN", ""),
+            node_service_account=env.get("NODO_CUENTA", ""),
+            rps_per_instance=float(env.get("INFRA_RPS_POR_INSTANCIA", "10")),
+            infra_interval=float(env.get("INFRA_INTERVALO", "10")),
+            infra_max_total_min=int(env.get("INFRA_MAX_INSTANCIAS_MINIMAS", "2")),
+            infra_max_per_region=int(env.get("INFRA_MAX_POR_REGION", "2")),
+            infra_max_services=int(env.get("INFRA_MAX_SERVICIOS", "3")),
+            infra_ttl=float(env.get("INFRA_TTL_SEGUNDOS", "1800")),
+            production=bool(env.get("K_SERVICE")),
+            api_docs=env.get("API_DOCS", "0" if env.get("K_SERVICE") else "1") == "1",
+            vigil_account=env.get("VIGILIA_CUENTA", ""),
+            vigil_audience=env.get("VIGILIA_AUDIENCIA", ""),
         )
+
+    def check(self) -> None:
+        """Falla cerrado: en producción, o con infraestructura real, sin clave fuerte no arranca."""
+        needs_key = self.production or self.infra_mode in ("plan", "real")
+        if needs_key and len(self.presenter_key) < 32:
+            raise RuntimeError("PRESENTER_KEY debe tener al menos 32 caracteres en producción o con "
+                               "INFRA_MODE=plan|real (genera una con: openssl rand -hex 16)")
+        if self.infra_mode == "real" and self.vigil_account and not self.vigil_audience:
+            raise RuntimeError("VIGILIA_CUENTA necesita VIGILIA_AUDIENCIA (la URL de la vigilia)")
 
     @property
     def uses_vertex(self) -> bool:

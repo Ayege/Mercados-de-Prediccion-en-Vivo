@@ -1,2 +1,5 @@
 pytest>=8
 ruff>=0.6
+# Seguridad, lo antes posible: auditoría de dependencias y ganchos antes de cada commit.
+pip-audit>=2.7
+pre-commit>=4

@@ -1,31 +1,41 @@
 C4Deployment
-  title Despliegue — CI/CD en Google Cloud
+  title Despliegue — pipeline con compuertas de seguridad y límites de costo
 
-  Deployment_Node(dev, "Laptop de la ponente", "git y VS Code") {
-    Container(repo, "Repositorio", "Python 3.12", "Código y pruebas")
+  Deployment_Node(dev, "Laptop de la ponente", "git, VS Code y gcloud") {
+    Container(repo, "Repositorio", "Python 3.12", "pre-commit: gitleaks, ruff con bandit, pip-audit, tests/security")
   }
 
-  Deployment_Node(gh, "GitHub Actions", "runner ubuntu-latest") {
-    Container(ci, "Pipeline de pruebas", "ruff y pytest", "Bloquea el despliegue si falla")
-    Container(cd, "Pipeline de despliegue", "identidad federada y gcloud", "Sin llaves de servicio almacenadas")
-  }
-
-  Deployment_Node(gcp, "Google Cloud", "proyecto de la charla") {
+  Deployment_Node(gcp, "Google Cloud", "oraculo-6d1578, us-east1") {
+    Deployment_Node(cb, "Cloud Build") {
+      Container(pipe, "cloudbuild.yaml", "compuertas en orden", "secretos → bandit → pip-audit → pruebas → imagen → Trivy → publicar → desplegar")
+    }
     Deployment_Node(ar, "Artifact Registry") {
-      Container(imagen, "Imagen OCI", "python:3.12-slim", "Etiquetada con el SHA del commit")
+      Container(imagen, "Imagen OCI", "python:3.12-slim por digest", "Dependencias con hash; usuario sin shell; APP_MODULE en lista blanca")
     }
-    Deployment_Node(run, "Cloud Run", "servicio gestionado") {
-      Container(servicio, "oraculo-api", "FastAPI", "max-instances 1 por el estado en memoria")
+    Deployment_Node(run, "Cloud Run") {
+      Container(api, "oraculo-api", "FastAPI", "Facturación por petición, min 0, max 1; sin /api/docs en producción")
+      Container(nodo, "oraculo-nodo-*", "FastAPI mínima", "Privados; ¼ vCPU; solo si el ponente activa la actuación")
     }
-    Deployment_Node(iam, "IAM") {
-      Container(sa, "Cuenta de servicio", "identidad", "roles/aiplatform.user; no hay secretos que montar")
+    Deployment_Node(iam, "IAM y secretos") {
+      Container(sarun, "oraculo-run", "identidad de la API", "aiplatform.user, run.developer, run.invoker; lectura del repo y del secreto")
+      Container(sanodo, "oraculo-nodo", "identidad de los nodos", "Sin ningún rol")
+      Container(savig, "oraculo-vigilia", "identidad de Scheduler", "Sin ningún rol; solo firma su token OIDC")
+      Container(secreto, "Secret Manager", "oraculo-presenter-key", "Una región; acceso solo para oraculo-run")
+    }
+    Deployment_Node(costo, "Límites de costo") {
+      Container(vigilia, "Cloud Scheduler", "oraculo-vigilia", "Cada 15 min")
+      Container(budget, "Presupuesto", "10 USD/mes", "Alertas al 50, 90 y 100 %; no corta el gasto")
     }
   }
 
-  Rel(repo, ci, "push y pull request")
-  Rel(ci, cd, "verde en main")
-  Rel(cd, imagen, "docker push")
-  Rel(imagen, servicio, "gcloud run deploy")
-  Rel(servicio, sa, "actúa como")
+  Rel(repo, pipe, "gcloud builds submit")
+  Rel(pipe, imagen, "push solo si Trivy pasa")
+  Rel(imagen, api, "gcloud run deploy")
+  Rel(api, nodo, "Crea y repara", "Admin API v2")
+  Rel(api, sarun, "actúa como")
+  Rel(nodo, sanodo, "actúa como")
+  Rel(vigilia, savig, "firma como")
+  Rel(vigilia, api, "POST /api/infra/vigilia", "OIDC")
+  Rel(api, secreto, "lee al arrancar")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

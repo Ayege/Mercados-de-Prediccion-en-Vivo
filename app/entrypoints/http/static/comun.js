@@ -13,7 +13,20 @@ const TIPOS = {
     etiqueta: "Información de la sala",
     mide: "La respuesta está repartida entre ustedes y ningún buscador la tiene. La resuelve un censo privado, no el oráculo.",
   },
+  simulacion: {
+    etiqueta: "Nube simulada",
+    mide: "Nadie sabe qué harán los agentes: el comportamiento es emergente. La resuelve el código de la simulación, no un modelo ni la sala.",
+  },
+  real: {
+    etiqueta: "Nube real · Cloud Run",
+    mide: "Se resuelve con lo que pase de verdad en Google Cloud: una falla real, un detector real y una reparación real, cronometrados.",
+  },
 };
+
+// El tipo que se muestra: las preguntas que resuelve la infraestructura real tienen el suyo.
+function tipo(m) {
+  return TIPOS[m.resolver === "infraestructura real" ? "real" : m.kind];
+}
 
 const RESULTADO = { YES: "SÍ", NO: "NO", UNRESOLVED: "SIN RESOLVER" };
 

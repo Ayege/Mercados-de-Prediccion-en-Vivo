@@ -88,7 +88,8 @@ def inject_fault(payload: dict, fault: str | None, trace: list[str]) -> dict:
 def interpret(payload: dict, model: str, trace: list[str], policy: AcceptancePolicy) -> Verdict:
     """Lee una respuesta de generateContent y la somete a la política."""
     candidate = (payload.get("candidates") or [{}])[0]
-    text = "".join(p.get("text", "") for p in candidate.get("content", {}).get("parts", []))
+    text = "".join(p.get("text", "") for p in candidate.get("content", {}).get("parts", [])
+                   if not p.get("thought"))
 
     meta = candidate.get("groundingMetadata") or {}
     evidence = normalize_sources(meta.get("groundingChunks", []))
@@ -99,7 +100,8 @@ def interpret(payload: dict, model: str, trace: list[str], policy: AcceptancePol
     try:
         raw = parse_verdict(text)
     except ValueError:
-        trace.append("respuesta no parseable → UNRESOLVED (fail-closed)")
+        trace.append(f"respuesta no parseable (finishReason {candidate.get('finishReason', '?')}) "
+                     "→ UNRESOLVED (fail-closed)")
         return policy.unreachable(model, trace, evidence, "Veredicto inválido.")
     return policy.apply(Proposal.from_raw(raw), evidence, model, trace, suggestions)
 

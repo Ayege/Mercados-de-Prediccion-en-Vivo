@@ -1,25 +1,30 @@
 C4Container
-  title Nivel 2 — Contenedores en Google Cloud
+  title Nivel 2 — Contenedores en Google Cloud (proyecto oraculo-6d1578)
 
   Person(publico, "Audiencia de la charla")
   Person(ponente, "Ponente")
 
   Container_Boundary(sistema, "Proyecto de Google Cloud") {
-    Container(spa, "Interfaz web", "HTML y JavaScript", "Tablero proyectable servido por la propia API")
-    Container(api, "oraculo-api", "FastAPI sobre Cloud Run", "Valida órdenes, aplica LMSR, orquesta la resolución")
-    ContainerDb(estado, "Estado del mercado", "Diccionario en memoria", "Mercados, saldos y posiciones; se pierde al reiniciar")
-    Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Una imagen por commit")
-    Container_Ext(logs, "Cloud Logging", "Trazas", "Una entrada por veredicto del oráculo")
+    Container(web, "Pantallas", "HTML y JavaScript sin scripts en línea", "/, /proyeccion.html, /nube.html; CSP script-src 'self'")
+    Container(api, "oraculo-api", "FastAPI en Cloud Run", "Controles de borde, mercado, simulación y controlador; escala a cero, máximo 1")
+    ContainerDb(estado, "Estado", "Memoria del proceso", "Mercados, cuentas (solo hashes de tokens) y simulación")
+    Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Solo /salud; corren como oraculo-nodo, sin roles")
+    ContainerDb(secreto, "Secret Manager", "oraculo-presenter-key", "Solo oraculo-run puede leerlo")
+    Container_Ext(scheduler, "Cloud Scheduler", "Job oraculo-vigilia", "Firma con la cuenta oraculo-vigilia, sin roles")
+    Container_Ext(registry, "Artifact Registry", "Imágenes OCI", "Solo imágenes que pasaron Trivy; se conservan 3")
   }
 
-  System_Ext(vertex, "Vertex AI", "Gemini con grounding de Búsqueda de Google")
+  System_Ext(vertex, "Vertex AI", "Gemini")
 
-  Rel(publico, spa, "Opera", "HTTPS")
-  Rel(ponente, spa, "Crea y resuelve", "HTTPS")
-  Rel(spa, api, "Llama", "JSON sobre HTTPS")
+  Rel(publico, web, "Apuesta; su tráfico es la demanda", "HTTPS + token de usuario")
+  Rel(ponente, web, "Controla", "HTTPS + clave de ponente")
+  Rel(web, api, "Llama", "JSON, mismo origen")
   Rel(api, estado, "Lee y escribe", "en proceso")
-  Rel(api, vertex, "Resuelve el mercado", "ADC, sin llaves")
-  Rel(api, logs, "Registra la traza del veredicto")
-  Rel(registry, api, "Despliega la revisión", "Cloud Run")
+  Rel(api, secreto, "PRESENTER_KEY", "secretAccessor")
+  Rel(api, vertex, "Veredictos y topologías", "ADC, sin llaves")
+  Rel(api, nodos, "Crea, escala, repara, borra; sondea", "Admin API v2, token de identidad")
+  Rel(scheduler, api, "Vigilia", "OIDC verificado por la app")
+  Rel(registry, nodos, "Imagen")
+  Rel(registry, api, "Imagen")
 
-  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+  UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

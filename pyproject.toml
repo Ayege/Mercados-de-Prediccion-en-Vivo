@@ -3,7 +3,10 @@ line-length = 110
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "S"]  # S = flake8-bandit: análisis estático de seguridad
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S311"]  # assert, claves de prueba y azar no criptográfico
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

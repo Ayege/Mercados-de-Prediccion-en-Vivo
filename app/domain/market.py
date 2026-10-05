@@ -8,16 +8,19 @@ Cada mercado declara qué tipo de pregunta es, porque eso cambia qué mide el pr
 - `futuro`: hoy no tiene respuesta. Está para que el oráculo diga UNRESOLVED.
 - `sala`: la respuesta está repartida entre los asistentes y no se puede buscar.
   Lo resuelve un censo privado de la propia sala, no el oráculo.
+- `simulacion`: qué harán los agentes de la nube simulada. Nadie lo sabe porque
+  el comportamiento es emergente. Lo resuelve el propio código de la simulación.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from . import lmsr
+from .cloud.predicates import PREDICATES, REAL
 from .errors import MarketError
 from .verdict import OUTCOMES, Verdict
 
-KINDS = ("presente", "futuro", "sala")
+KINDS = ("presente", "futuro", "sala", "simulacion")
 MAX_ORDER = 10_000
 
 
@@ -39,6 +42,7 @@ class Market:
     b: float = 100.0
     kind: str = "presente"
     threshold: float = 0.5
+    predicate: str | None = None
     q: list[float] = field(default_factory=lambda: [0.0, 0.0])
     status: str = "open"
     outcome: str | None = None
@@ -51,14 +55,22 @@ class Market:
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise MarketError("tipo de pregunta inválido")
+        if (self.kind == "simulacion") != (self.predicate in PREDICATES):
+            raise MarketError("las preguntas de simulación necesitan un predicado conocido, y solo ellas")
 
     @property
     def resolved_by_census(self) -> bool:
         return self.kind == "sala"
 
     @property
+    def resolved_by_simulation(self) -> bool:
+        return self.kind == "simulacion"
+
+    @property
     def resolver(self) -> str:
-        return "censo" if self.resolved_by_census else "oráculo"
+        if self.predicate in REAL:
+            return "infraestructura real"
+        return {"sala": "censo", "simulacion": "simulación"}.get(self.kind, "oráculo")
 
     @property
     def max_loss(self) -> float:
@@ -113,6 +125,7 @@ class Account:
     name: str
     balance: float
     positions: dict[str, dict[str, float]] = field(default_factory=dict)
+    credential: str = ""  # hash del token de la persona; el token en claro nunca se guarda
 
     @staticmethod
     def normalize(name: str) -> str:

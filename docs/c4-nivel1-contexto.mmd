@@ -1,19 +1,34 @@
-C4Context
-  title Nivel 1 — Contexto: mercado de predicción en vivo
+---
+title: "Nivel 1 — Contexto: mercado de predicción y nube autónoma"
+---
+%% Diagrama de contexto C4 dibujado como flowchart: el layout C4 nativo de Mermaid
+%% amontona las etiquetas. Colores C4: persona (azul oscuro), sistema propio (azul),
+%% sistema externo (gris).
+flowchart LR
+  publico["👥 <b>Audiencia de la charla</b><br/><i>[Persona]</i><br/>Apuesta desde el móvil con un token propio.<br/>Su tráfico es la demanda real."]
+  ponente["🎤 <b>Ponente</b><br/><i>[Persona]</i><br/>Opera la demo con la clave de ponente."]
 
-  Person(publico, "Audiencia de la charla", "Opera desde su teléfono con saldo ficticio")
-  Person(ponente, "Ponente", "Crea mercados y dispara la resolución")
+  oraculo["<b>Oráculo</b><br/><i>[Sistema]</i><br/>Mercado LMSR, oráculo de IA y nube autónoma.<br/>El modelo propone; dos políticas en código deciden."]
 
-  System(mercado, "Mercado de predicción en vivo", "Cotiza con LMSR, acepta órdenes y resuelve con un oráculo de IA")
+  vertex["<b>Vertex AI</b><br/><i>[Sistema externo]</i><br/>Gemini: veredictos con grounding<br/>y propuestas de topología."]
+  fuentes["<b>Fuentes primarias</b><br/><i>[Sistema externo]</i><br/>Releases, bancos centrales,<br/>registros oficiales."]
+  cloudrun["<b>Cloud Run</b><br/><i>[Sistema externo]</i><br/>Nodos oraculo-nodo-REGIÓN que el<br/>controlador crea, escala, repara y borra."]
+  secretos["<b>Secret Manager</b><br/><i>[Sistema externo]</i><br/>Guarda la clave de ponente."]
+  scheduler["<b>Cloud Scheduler</b><br/><i>[Sistema externo]</i><br/>Vigilia cada 15 min con un<br/>token OIDC firmado por Google."]
+  build["<b>Cloud Build</b><br/><i>[Sistema externo]</i><br/>Compuertas: secretos, bandit,<br/>pip-audit, pruebas, Trivy."]
 
-  System_Ext(vertex, "Vertex AI", "Gemini emite un veredicto con grounding de Búsqueda de Google")
-  System_Ext(fuentes, "Fuentes primarias", "Releases, bancos centrales, registros oficiales")
-  System_Ext(gha, "GitHub Actions", "Prueba, construye y despliega")
+  publico -- "Apuesta y responde el censo<br/><i>HTTPS + X-User-Token</i>" --> oraculo
+  ponente -- "Opera la demo<br/><i>HTTPS + X-Presenter-Key</i>" --> oraculo
+  oraculo -- "Pregunta y pide topologías<br/><i>HTTPS, ADC</i>" --> vertex
+  vertex -- "Busca evidencia<br/><i>grounding</i>" --> fuentes
+  oraculo -- "Admin API v2 y sondeos<br/><i>ADC, tokens de identidad</i>" --> cloudrun
+  oraculo -- "Lee la clave al arrancar" --> secretos
+  scheduler -- "POST /api/infra/vigilia<br/><i>OIDC</i>" --> oraculo
+  build -- "Despliega si todo pasa" --> oraculo
 
-  Rel(publico, mercado, "Compra SÍ o NO", "HTTPS")
-  Rel(ponente, mercado, "Crea y resuelve", "HTTPS")
-  Rel(mercado, vertex, "Pregunta y criterio", "HTTPS/JSON")
-  Rel(vertex, fuentes, "Busca evidencia", "grounding")
-  Rel(gha, mercado, "Despliega", "identidad federada")
-
-  UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+  classDef persona fill:#08427b,stroke:#052e56,color:#fff
+  classDef sistema fill:#1168bd,stroke:#0b4884,color:#fff
+  classDef externo fill:#8c8c8c,stroke:#6b6b6b,color:#fff
+  class publico,ponente persona
+  class oraculo sistema
+  class vertex,fuentes,cloudrun,secretos,scheduler,build externo

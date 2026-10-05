@@ -51,7 +51,7 @@ def test_census_market_never_calls_the_oracle():
     s = service(oracle)
     mid = s.create("¿Pregunta?", "Criterio", kind="sala")["id"]
     for name in "abcde":
-        s.answer_census(mid, name, True)
+        s.answer_census(mid, name, s.enter(name)["token"], True)
     assert asyncio.run(s.resolve(mid))["outcome"] == "YES"
     assert oracle.calls == []
 
@@ -76,17 +76,19 @@ def test_unknown_fault_is_rejected_before_calling_the_oracle():
 def test_failed_trade_does_not_charge_the_account():
     s = service()
     mid = s.create("¿Pregunta?", "Criterio")["id"]
+    aye = s.enter("aye")["token"]
     with pytest.raises(MarketError):
-        s.trade(mid, "aye", "MAYBE", 100)
-    assert s.account("aye")["balance"] == 1000
+        s.trade(mid, "aye", aye, "MAYBE", 100)
+    assert s.account("aye", aye)["balance"] == 1000
 
 
 def test_settlement_pays_every_holder():
     s = service(FakeOracle("NO"))
     mid = s.create("¿Pregunta?", "Criterio")["id"]
-    yes = s.trade(mid, "aye", "YES", 100)["shares"]
-    no = s.trade(mid, "bob", "NO", 100)["shares"]
+    aye, bob = s.enter("aye")["token"], s.enter("bob")["token"]
+    yes = s.trade(mid, "aye", aye, "YES", 100)["shares"]
+    no = s.trade(mid, "bob", bob, "NO", 100)["shares"]
     asyncio.run(s.resolve(mid))
-    assert s.account("aye")["balance"] == pytest.approx(900)
-    assert s.account("bob")["balance"] == pytest.approx(900 + no)
+    assert s.account("aye", aye)["balance"] == pytest.approx(900)
+    assert s.account("bob", bob)["balance"] == pytest.approx(900 + no)
     assert yes > 0

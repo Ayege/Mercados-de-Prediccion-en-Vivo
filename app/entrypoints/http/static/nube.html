@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oráculo · Nube autónoma</title>
+<link rel="stylesheet" href="estilo.css">
+<style>
+  main { max-width: 90rem; }
+  .rejilla-tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); gap: 1rem; }
+  .tarjeta { margin: 0; min-width: 0; }
+  .cifra, .rejilla-tarjetas > * { min-width: 0; }
+  .traza { overflow-wrap: anywhere; }
+  .tarjeta h2 { font-size: 1rem; margin: 0 0 .2rem; }
+  .que { font-size: .82rem; color: var(--tenue); margin: 0 0 .6rem; }
+  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .8rem; margin: 1rem 0; }
+  .cifra { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: .7rem .9rem; }
+  .cifra strong { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .cifra span { font-size: .8rem; color: var(--tenue); }
+  .controles { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .controles .grupo { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding-right: .8rem; }
+  .lista { list-style: none; padding: 0; margin: 0; font-size: .85rem; }
+  .lista li { padding: .35rem 0; border-bottom: 1px solid var(--borde); }
+  .traza { font: .78rem/1.5 ui-monospace, Menlo, monospace; margin: .2rem 0 0; padding-left: 1.1rem; }
+  .muestra { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: -1px; }
+  .honesto { border-left: 3px solid var(--acento); padding: .3rem .8rem; }
+  .pista { font-size: .82rem; color: var(--tenue); border-left: 3px solid var(--pendiente); padding: .2rem .7rem; margin: .5rem 0; }
+  .guia ol { margin: .4rem 0; padding-left: 1.2rem; font-size: .88rem; }
+  .guia li { margin: .25rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Nube autónoma</h1>
+  <p class="honesto pequeno" id="honesto">Esto es una <strong>simulación</strong>: doce agentes en cinco regiones.
+    Cada técnica está en su versión más pequeña que todavía es honesta, y cada tarjeta dice cuál.</p>
+  <p class="tenue pequeno" id="estado"></p>
+  <p class="pista" id="sin-clave" hidden>Los controles del ponente están ocultos: abre esta página con
+    <code>#clave=TU_CLAVE</code> al final de la URL.</p>
+
+  <details class="tarjeta guia" id="guia">
+    <summary><strong>Cómo usar esta página</strong></summary>
+    <ol>
+      <li><strong>Iniciar</strong> pone a correr la simulación: un tick por segundo, una generación cada 24 ticks.</li>
+      <li><strong>Pedir al modelo</strong> o <strong>Búsqueda evolutiva</strong> proponen una topología. La política la
+        acepta o la rechaza con sus razones; si la acepta y es mejor que la actual, se adopta.</li>
+      <li><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios. Mira cuánto tarda el detector.</li>
+      <li id="guia-real" hidden><strong>Activar actuación</strong> despliega la topología adoptada como servicios reales
+        de Cloud Run. La sala genera la demanda abriendo la página de audiencia. Cuando un nodo tenga 5 sondeos,
+        inyecta una falla real y cronometra la reparación.</li>
+      <li id="guia-apagar" hidden>Al terminar, <strong>Apagar todo</strong>. Si lo olvidas, la vigilia borra los nodos
+        cuando nadie mira esta página durante 30 minutos.</li>
+      <li>Las preguntas de la sala sobre la nube se resuelven desde <a href="proyeccion.html" id="enlace-proyeccion">la
+        proyección del mercado</a>.</li>
+    </ol>
+  </details>
+
+  <section class="controles tarjeta" id="controles" hidden>
+    <div class="grupo"><strong class="pequeno">Reloj de la simulación</strong>
+      <button data-accion="iniciar" title="Un tick por segundo">Iniciar</button>
+      <button data-accion="pausar">Pausar</button>
+      <button data-accion="avanzar" data-n="1">+1 tick</button>
+      <button data-accion="avanzar" data-n="24" title="Cierra una generación: selección y mutación">+1 generación</button>
+    </div>
+    <div class="grupo"><strong class="pequeno">Fallas simuladas</strong>
+      <button data-falla="caida_nodo" title="Un nodo ficticio deja de responder">Caída de nodo</button>
+      <button data-falla="latencia" title="Un nodo ficticio se vuelve lento 10 ticks">Latencia</button>
+      <button data-falla="pico_demanda" title="La demanda simulada se multiplica por 2,5 durante 6 ticks">Pico de demanda</button>
+    </div>
+    <div class="grupo"><strong class="pequeno">Topologías</strong>
+      <button data-topologia="generativo" title="Gemini propone; la política decide">Pedir al modelo</button>
+      <button data-topologia="evolutivo" title="Algoritmo genético determinista">Búsqueda evolutiva</button>
+    </div>
+  </section>
+  <p class="error" id="error" role="alert"></p>
+
+  <div class="cifras" id="cifras"></div>
+
+  <article class="tarjeta" id="infra" hidden style="margin-bottom:1rem">
+    <h2>Infraestructura real</h2>
+    <p class="que" id="infra-que"></p>
+    <div class="controles" id="infra-controles" hidden>
+      <button data-infra="actuar" title="Crea, escala y repara servicios reales de Cloud Run. Cuesta dinero mientras haya instancias mínimas">Activar actuación</button>
+      <button data-infra="ciclo" title="Observar, sondear y actuar ya, sin esperar los 10 s">Ciclo ahora</button>
+      <button data-infra="apagar" class="no" title="Borra todos los nodos y pausa la actuación">Apagar todo</button>
+    </div>
+    <p class="pista" id="infra-pista"></p>
+    <p class="pequeno" id="infra-notas"></p>
+    <div class="rejilla-tarjetas">
+      <div><div id="g-demanda-real"></div></div>
+      <div class="tabla" id="infra-nodos"></div>
+    </div>
+    <div class="rejilla-tarjetas" style="margin-top:.6rem">
+      <div><strong class="pequeno">Decisiones de la política de actuación</strong><ul class="lista" id="infra-log"></ul></div>
+      <div><strong class="pequeno">Incidentes reales</strong><ul class="lista" id="infra-incidentes"></ul></div>
+    </div>
+  </article>
+
+  <div class="rejilla-tarjetas">
+    <article class="tarjeta">
+      <h2>Predecir la demanda</h2>
+      <p class="que">Holt-Winters aditivo con ciclo de 24 ticks, comparado con el pronóstico ingenuo
+        («igual que hace un ciclo»). Si no le gana a eso, no sirve.</p>
+      <div id="g-demanda"></div>
+    </article>
+
+    <article class="tarjeta">
+      <h2>Fijar precios</h2>
+      <p class="que">Subasta de precio uniforme por recurso. Cada agente ajusta su margen con Q-learning tabular
+        según la escasez prevista. El subastador es central: este mercado <em>no</em> es descentralizado.</p>
+      <div id="g-precios"></div>
+    </article>
+
+    <article class="tarjeta">
+      <h2>Evolucionar</h2>
+      <p class="que">Cada 24 ticks, selección por torneo, cruce y mutación reemplazan al 75 % peor. La línea de
+        texto compara con lo que predice la dinámica del replicador.</p>
+      <div id="g-estrategias"></div>
+      <p class="pequeno" id="replicador"></p>
+      <details><summary class="pequeno">Tabla por generación</summary><div class="tabla" id="t-generaciones"></div></details>
+    </article>
+
+    <article class="tarjeta">
+      <h2>Formar coaliciones</h2>
+      <p class="que">Contratos que ningún agente cubre solo y que exigen dos regiones. Los dispuestos se
+        coaligan y reparten la ganancia por valor de Shapley exacto.</p>
+      <p class="pequeno" id="coaliciones-resumen"></p>
+      <ul class="lista" id="coaliciones"></ul>
+    </article>
+
+    <article class="tarjeta">
+      <h2>Detectar y reparar</h2>
+      <p class="que">Detector EWMA con z-score sobre la latencia de cada nodo y el error de predicción. No sabe qué
+        falla inyectaste. Remedia drenando y reemplazando el nodo; el reemplazo tarda 3–7 ticks y a veces sale defectuoso.</p>
+      <ul class="lista" id="incidentes"></ul>
+    </article>
+
+    <article class="tarjeta">
+      <h2>Generar arquitecturas</h2>
+      <p class="que">El modelo generativo y un algoritmo genético proponen topologías. Ninguno decide:
+        la política en código revisa presupuesto, regiones, disponibilidad y latencia.</p>
+      <div id="topologia"></div>
+      <ul class="lista" id="propuestas"></ul>
+    </article>
+  </div>
+
+  <article class="tarjeta" style="margin-top:1rem">
+    <h2>Agentes</h2>
+    <p class="que">Genoma heredado (margen, reserva, cooperación, previsión) más el ajuste que aprendió en vida.
+      Los hijos heredan el genoma, no lo aprendido.</p>
+    <div class="tabla" id="agentes"></div>
+  </article>
+</main>
+
+<script src="comun.js"></script>
+<script src="graficos.js"></script>
+<script src="nube.js"></script>
+</body>
+</html>

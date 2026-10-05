@@ -5,6 +5,8 @@ from collections.abc import Iterable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
+from ..domain.cloud.infra import NodeState, Probe
+from ..domain.cloud.topology import Draft
 from ..domain.market import Account, Market
 from ..domain.verdict import Verdict
 
@@ -46,3 +48,43 @@ class Repository(Protocol):
     def add_account(self, account: Account) -> None: ...
 
     def accounts(self) -> Iterable[Account]: ...
+
+
+class SimulationJudge(Protocol):
+    """Resuelve las preguntas `simulacion` a partir del estado de la nube simulada."""
+
+    def judge(self, predicate: str) -> Verdict: ...
+
+
+class TopologyGenerator(Protocol):
+    """Un modelo generativo que propone topologías. Tan poco confiable como el oráculo.
+
+    Contrato: nunca lanza. Si falla, devuelve un Draft sin propuesta y con la traza.
+    """
+
+    name: str
+    model: str
+
+    async def propose(self, brief: dict) -> Draft: ...
+
+
+class NodeGateway(Protocol):
+    """Servicios `oraculo-nodo-<región>` en una nube, real o de ensayo.
+
+    Contrato: solo toca servicios con ese prefijo. Las escrituras pueden lanzar;
+    el controlador las registra como fallidas y sigue.
+    """
+
+    name: str
+
+    async def list(self) -> dict[str, NodeState]: ...
+
+    async def create(self, region: str, min_instances: int, max_instances: int) -> str: ...
+
+    async def scale(self, region: str, min_instances: int, max_instances: int) -> str: ...
+
+    async def set_fault(self, region: str, fault: str | None) -> str: ...
+
+    async def delete(self, region: str) -> str: ...
+
+    async def probe(self, state: NodeState) -> Probe: ...

@@ -1,42 +1,101 @@
-"""Adaptador HTTP: traduce peticiones a casos de uso y errores a códigos de estado."""
+"""Adaptador HTTP: traduce peticiones a casos de uso y errores a códigos de estado.
+
+Aquí viven los controles de borde, todos en un solo archivo para poder revisarlos
+de una vez (ver SECURITY.md):
+
+- Ponente: cabecera `X-Presenter-Key`, comparada en tiempo constante.
+- Audiencia: cabecera `X-User-Token`, emitida una sola vez al entrar con un nombre.
+- Cloud Scheduler: token OIDC de Google verificado (audiencia y cuenta), sin secretos compartidos.
+- Cabeceras de seguridad y CSP estricta para scripts en todas las respuestas.
+- La vista pública de la infraestructura no muestra errores internos ni deja
+  que cualquiera mantenga vivos los nodos.
+"""
 from __future__ import annotations
 
 import secrets
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ...application.errors import Cooldown, NotFound
+from ...application.cloud import CloudService
+from ...application.errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
+from ...application.infra import InfraController
 from ...application.ports import FAULTS
 from ...application.service import MarketService
-from ...domain.errors import MarketError
-from .schemas import CensusAnswer, NewMarket, Trade
+from ...domain.errors import MarketError, SimulationError
+from .schemas import CensusAnswer, Enter, InjectFault, NewMarket, RealFault, Trade
 
 STATIC = Path(__file__).parent / "static"
 Fault = Literal[tuple(FAULTS)]  # type: ignore[valid-type]
 
+# Scripts solo desde el propio origen: ningún script en línea, ningún dominio externo.
+# Los estilos en línea se permiten porque los gráficos SVG los usan; inyectar estilo es mucho
+# menos grave que inyectar script.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+STATUS = {NotFound: 404, Unauthorized: 401, Conflict: 409, Cooldown: 429, RateLimited: 429}
 
-def create_app(service: MarketService, presenter_key: str = "", revision: str = "local") -> FastAPI:
-    app = FastAPI(title="Oráculo — mercados de predicción", docs_url="/api/docs")
+SchedulerCheck = Callable[[str], Awaitable[bool]]
+
+
+def create_app(service: MarketService, cloud: CloudService, infra: InfraController | None = None,
+               presenter_key: str = "", revision: str = "local", docs: bool = True,
+               scheduler_check: SchedulerCheck | None = None) -> FastAPI:
+    app = FastAPI(title="Oráculo — mercados de predicción", docs_url="/api/docs" if docs else None,
+                  redoc_url=None, openapi_url="/openapi.json" if docs else None)
+
+    @app.middleware("http")
+    async def harden(request: Request, call_next):
+        if infra and request.url.path.startswith("/api/") and not request.url.path.startswith("/api/infra"):
+            infra.count_request()  # cada petición de la sala es demanda real para el autoescalado
+        response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def is_presenter(request: Request) -> bool:
+        """Sin `presenter_key` (desarrollo local) todos son ponente. En Cloud Run, main.py
+        se niega a arrancar sin una clave fuerte."""
+        given = request.headers.get("x-presenter-key", "")
+        return not presenter_key or secrets.compare_digest(given.encode(), presenter_key.encode())
 
     def presenter_only(request: Request) -> None:
-        """Crear y resolver mercados es del ponente, no de la audiencia.
-
-        Sin `presenter_key` (desarrollo local) no se exige nada.
-        """
-        given = request.headers.get("x-presenter-key", "")
-        if presenter_key and not secrets.compare_digest(given, presenter_key):
+        if not is_presenter(request):
             raise HTTPException(403, "solo el ponente puede hacer esto")
+
+    async def presenter_or_scheduler(request: Request) -> None:
+        if is_presenter(request):
+            return
+        auth = request.headers.get("authorization", "")
+        if scheduler_check and auth.startswith("Bearer ") and await scheduler_check(auth[7:]):
+            return
+        raise HTTPException(403, "solo el ponente o Cloud Scheduler pueden hacer esto")
 
     @app.exception_handler(MarketError)
     async def market_error(_: Request, exc: MarketError):
-        code = 404 if isinstance(exc, NotFound) else 429 if isinstance(exc, Cooldown) else 400
+        code = next((c for kind, c in STATUS.items() if isinstance(exc, kind)), 400)
         return JSONResponse({"detail": str(exc)}, status_code=code)
 
+    @app.exception_handler(SimulationError)
+    async def simulation_error(_: Request, exc: SimulationError):
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    # Cloud Run reserva las rutas que terminan en "z": en producción, usa /api/salud.
     @app.get("/healthz")
+    @app.get("/api/salud")
     def healthz():
         return {"ok": True}
 
@@ -44,36 +103,111 @@ def create_app(service: MarketService, presenter_key: str = "", revision: str = 
     def info():
         o = service.oracle
         return {"oracle": o.name, "model": o.model, "revision": revision,
-                "faults": FAULTS, "presenter_key_required": bool(presenter_key)}
+                "faults": FAULTS, "presenter_key_required": bool(presenter_key),
+                "infra": infra.mode if infra else "apagado"}
+
+    # --- audiencia ---------------------------------------------------------------
+    @app.post("/api/entrar", status_code=201)
+    def enter(body: Enter):
+        return service.enter(body.name)
 
     @app.get("/api/markets")
     def list_markets():
         return service.list()
-
-    @app.post("/api/markets", status_code=201, dependencies=[Depends(presenter_only)])
-    def create_market(body: NewMarket):
-        return service.create(body.question.strip(), body.criteria.strip(), body.b,
-                              body.kind, body.threshold)
 
     @app.get("/api/markets/{market_id}")
     def get_market(market_id: str):
         return service.view(market_id)
 
     @app.post("/api/markets/{market_id}/trade")
-    def trade(market_id: str, body: Trade):
-        return service.trade(market_id, body.user, body.outcome, body.amount)
+    def trade(market_id: str, body: Trade, x_user_token: str = Header("", max_length=64)):
+        return service.trade(market_id, body.user, x_user_token, body.outcome, body.amount)
 
     @app.post("/api/markets/{market_id}/census")
-    def census(market_id: str, body: CensusAnswer):
-        return service.answer_census(market_id, body.user, body.answer)
+    def census(market_id: str, body: CensusAnswer, x_user_token: str = Header("", max_length=64)):
+        return service.answer_census(market_id, body.user, x_user_token, body.answer)
+
+    @app.get("/api/users/{name}")
+    def user(name: str, x_user_token: str = Header("", max_length=64)):
+        return service.account(name, x_user_token)
+
+    # --- ponente: mercados ---------------------------------------------------------
+    @app.post("/api/markets", status_code=201, dependencies=[Depends(presenter_only)])
+    def create_market(body: NewMarket):
+        return service.create(body.question.strip(), body.criteria.strip(), body.b,
+                              body.kind, body.threshold, body.predicate)
 
     @app.post("/api/markets/{market_id}/resolve", dependencies=[Depends(presenter_only)])
     async def resolve(market_id: str, fault: Fault | None = None):
         return await service.resolve(market_id, fault)
 
-    @app.get("/api/users/{name}")
-    def user(name: str):
-        return service.account(name)
+    # --- nube simulada -----------------------------------------------------------
+    @app.get("/api/nube")
+    def cloud_view():
+        return cloud.view()
+
+    @app.post("/api/nube/iniciar", dependencies=[Depends(presenter_only)])
+    def cloud_start():
+        return cloud.start()
+
+    @app.post("/api/nube/pausar", dependencies=[Depends(presenter_only)])
+    def cloud_pause():
+        return cloud.pause()
+
+    @app.post("/api/nube/avanzar", dependencies=[Depends(presenter_only)])
+    def cloud_step(n: int = 1):
+        return cloud.step(n)
+
+    @app.post("/api/nube/fallas", dependencies=[Depends(presenter_only)])
+    def cloud_inject(body: InjectFault):
+        return cloud.inject(body.kind, body.target)
+
+    @app.post("/api/nube/topologias", dependencies=[Depends(presenter_only)])
+    async def cloud_propose(fuente: Literal["generativo", "evolutivo"]):
+        return await cloud.propose(fuente)
+
+    # --- infraestructura real ---------------------------------------------------
+    def need_infra() -> InfraController:
+        if infra is None:
+            raise HTTPException(409, "la infraestructura real está apagada (INFRA_MODE=apagado)")
+        return infra
+
+    @app.get("/api/infra")
+    async def infra_view(request: Request):
+        if infra is None:
+            return {"mode": "apagado"}
+        if is_presenter(request):
+            # Solo el ponente mueve el reloj del controlador y cuenta como «alguien mira».
+            # Si cualquiera pudiera, bastaría con consultar esta URL para que la vigilia
+            # nunca apagara los nodos.
+            infra.touch()
+            await infra.maybe_cycle()
+            return infra.view()
+        return infra.view(detailed=False)
+
+    @app.post("/api/infra/vigilia", dependencies=[Depends(presenter_or_scheduler)])
+    async def infra_vigil():
+        return await need_infra().vigil()
+
+    @app.post("/api/infra/actuar", dependencies=[Depends(presenter_only)])
+    def infra_toggle(activo: bool):
+        need_infra().set_active(activo)
+        return need_infra().view()
+
+    @app.post("/api/infra/ciclo", dependencies=[Depends(presenter_only)])
+    async def infra_cycle():
+        await need_infra().cycle()
+        return need_infra().view()
+
+    @app.post("/api/infra/fallas", dependencies=[Depends(presenter_only)])
+    async def infra_fault(body: RealFault):
+        await need_infra().inject(body.region, body.kind)
+        return need_infra().view()
+
+    @app.post("/api/infra/apagar", dependencies=[Depends(presenter_only)])
+    async def infra_shutdown():
+        await need_infra().shutdown()
+        return need_infra().view()
 
     app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
     return app

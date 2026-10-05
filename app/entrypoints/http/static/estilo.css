@@ -9,6 +9,10 @@
   --pendiente: #a86a00;
   --acento: #2f5bd3;
   --chip: #efeee9;
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -22,6 +26,10 @@
     --pendiente: #f0b44c;
     --acento: #7c9cf5;
     --chip: #2a2a27;
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --serie-4: #c98500;
   }
 }
 :root[data-theme="dark"] {
@@ -35,6 +43,10 @@
   --pendiente: #f0b44c;
   --acento: #7c9cf5;
   --chip: #2a2a27;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
 }
 
 * { box-sizing: border-box; }
@@ -91,3 +103,31 @@ button.no { border-color: var(--no); }
 
 .aviso { border-left: 3px solid var(--pendiente); padding: .3rem .8rem; }
 .error { color: var(--no); min-height: 1.5em; }
+
+/* --- gráficos ------------------------------------------------------------------ */
+.grafico { position: relative; }
+.lienzo { width: 100%; height: auto; display: block; overflow: visible; }
+.rejilla { stroke: var(--borde); stroke-width: 1; }
+.eje { fill: var(--tenue); font-size: 11px; }
+.etiqueta { font-weight: 600; fill: var(--texto); }
+.serie { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.guia { stroke: var(--tenue); stroke-width: 1; }
+.segmento:hover, .segmento:focus { opacity: .8; outline: none; }
+.leyenda { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .8rem; color: var(--tenue); margin-bottom: .3rem; }
+.leyenda > span { display: inline-flex; align-items: center; gap: .35rem; }
+.ley-linea { width: 14px; height: 2px; border-radius: 1px; }
+.ley-caja { width: 10px; height: 10px; border-radius: 2px; }
+.tip {
+  position: absolute; top: 1.6rem; pointer-events: none; z-index: 2;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: 8px;
+  padding: .4rem .6rem; font-size: .8rem; box-shadow: 0 2px 8px rgb(0 0 0 / .12); min-width: 9rem;
+}
+.tip-titulo { color: var(--tenue); margin-bottom: .2rem; }
+.tip-fila { display: flex; align-items: center; gap: .4rem; }
+.tip-clave { width: 12px; height: 2px; border-radius: 1px; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--borde); }
+th { color: var(--tenue); font-weight: 500; }
+.tabla { overflow-x: auto; }
+
+#ingreso .pequeno { flex-basis: 100%; margin: 0; }

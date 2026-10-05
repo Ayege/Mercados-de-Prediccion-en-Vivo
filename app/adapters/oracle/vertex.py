@@ -1,15 +1,11 @@
 """Adaptador contra Gemini en Vertex AI con grounding de Búsqueda de Google."""
 from __future__ import annotations
 
-import asyncio
 from datetime import date
 
-import httpx
-
 from ...domain.verdict import AcceptancePolicy, Verdict
+from ..vertex_client import VertexClient
 from .gemini import run
-
-SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 SYSTEM = """Eres un oráculo de resolución para un mercado de predicción.
 Decides si una pregunta se resolvió SÍ (YES), NO (NO) o aún no se puede decidir (UNRESOLVED).
@@ -28,41 +24,15 @@ Responde SOLO con JSON, sin texto adicional ni backticks:
 
 
 class VertexOracle:
-    """Sin llaves de API: usa las credenciales por defecto (ADC). En Cloud Run eso
-    es la cuenta de servicio del servicio, que solo necesita roles/aiplatform.user.
-    """
-
     name = "vertex"
 
-    def __init__(self, project: str, location: str, model: str, policy: AcceptancePolicy):
-        self.project = project
-        self.location = location
-        self.model = model
+    def __init__(self, client: VertexClient, policy: AcceptancePolicy):
+        self.client = client
+        self.model = client.model
         self.policy = policy
-        self._creds = None
-
-    @property
-    def endpoint(self) -> str:
-        host = "aiplatform.googleapis.com"
-        if self.location != "global":
-            host = f"{self.location}-{host}"
-        return (
-            f"https://{host}/v1/projects/{self.project}/locations/{self.location}"
-            f"/publishers/google/models/{self.model}:generateContent"
-        )
-
-    def _token(self) -> str:
-        import google.auth
-        from google.auth.transport.requests import Request
-
-        if self._creds is None:
-            self._creds, _ = google.auth.default(scopes=[SCOPE])
-        if not self._creds.valid:
-            self._creds.refresh(Request())
-        return self._creds.token
 
     async def _call(self, question: str, criteria: str) -> dict:
-        body = {
+        return await self.client.generate({
             "systemInstruction": {"parts": [{"text": SYSTEM.format(today=date.today().isoformat())}]},
             "contents": [
                 {
@@ -73,18 +43,9 @@ class VertexOracle:
                 }
             ],
             "tools": [{"googleSearch": {}}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 1500},
-        }
-        token = await asyncio.to_thread(self._token)
-        async with httpx.AsyncClient(timeout=90) as client:
-            r = await client.post(
-                self.endpoint,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=body,
-            )
-        r.raise_for_status()
-        return r.json()
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
+        })
 
     async def resolve(self, question: str, criteria: str, fault: str | None = None) -> Verdict:
-        trace = [f"consultando a {self.model} en Vertex AI ({self.location})"]
+        trace = [f"consultando a {self.model} en Vertex AI ({self.client.location})"]
         return await run(self._call, question, criteria, self.model, trace, self.policy, fault)

@@ -1,6 +1,8 @@
 """Casos de uso del mercado: operar, responder el censo y resolver."""
 from __future__ import annotations
 
+import hashlib
+import secrets
 import time
 import uuid
 from collections.abc import Callable
@@ -8,8 +10,9 @@ from collections.abc import Callable
 from ..domain.errors import MarketError
 from ..domain.market import Account, Market
 from ..domain.verdict import CensusPolicy
-from .errors import Cooldown, NotFound
-from .ports import FAULTS, OracleGateway, Repository
+from .errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
+from .limits import SlidingWindow
+from .ports import FAULTS, OracleGateway, Repository, SimulationJudge
 from .views import account_view, market_view
 
 
@@ -19,18 +22,27 @@ class MarketService:
         repo: Repository,
         oracle: OracleGateway,
         census: CensusPolicy | None = None,
+        judge: SimulationJudge | None = None,
         starting_balance: float = 1000.0,
         oracle_cooldown: float = 30.0,
         clock: Callable[[], float] = time.time,
         new_id: Callable[[], str] = lambda: uuid.uuid4().hex[:8],
+        max_accounts: int = 2000,
+        entries: SlidingWindow | None = None,
+        orders: SlidingWindow | None = None,
     ):
         self.repo = repo
         self.oracle = oracle
         self.census = census or CensusPolicy()
+        self.judge = judge
         self.starting_balance = starting_balance
         self.cooldown = oracle_cooldown
         self.clock = clock
         self.new_id = new_id
+        # Límites contra abuso: cuentas en memoria de una sola instancia, y ritmo de escrituras.
+        self.max_accounts = max_accounts
+        self.entries = entries or SlidingWindow(limit=120, window=60)  # cuentas nuevas por minuto, en total
+        self.orders = orders or SlidingWindow(limit=10, window=10)  # órdenes por persona cada 10 s
 
     # --- lecturas ---------------------------------------------------------------
     def _market(self, market_id: str) -> Market:
@@ -39,13 +51,20 @@ class MarketService:
             raise NotFound("mercado no encontrado")
         return m
 
-    def _account(self, name: str) -> Account:
-        name = Account.normalize(name)
-        acc = self.repo.get_account(name)
-        if acc is None:
-            acc = Account(name, self.starting_balance)
-            self.repo.add_account(acc)
+    @staticmethod
+    def _digest(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def _authenticate(self, name: str, token: str) -> Account:
+        """La persona demuestra que el nombre es suyo con el token que recibió al entrar."""
+        acc = self.repo.get_account(Account.normalize(name))
+        if acc is None or not token or not secrets.compare_digest(acc.credential, self._digest(token)):
+            raise Unauthorized("token de usuario inválido: vuelve a entrar con otro nombre")
         return acc
+
+    def _throttle(self, acc: Account) -> None:
+        if not self.orders.allow(acc.name):
+            raise RateLimited("demasiadas órdenes seguidas: espera unos segundos")
 
     def list(self) -> list[dict]:
         with self.repo.transaction():
@@ -55,23 +74,42 @@ class MarketService:
         with self.repo.transaction():
             return market_view(self._market(market_id))
 
-    def account(self, name: str) -> dict:
+    def account(self, name: str, token: str) -> dict:
         with self.repo.transaction():
-            return account_view(self._account(name))
+            return account_view(self._authenticate(name, token))
+
+    def enter(self, name: str) -> dict:
+        """Reserva un nombre y entrega su token. El token se muestra una sola vez."""
+        name = Account.normalize(name)
+        with self.repo.transaction():
+            if self.repo.get_account(name) is not None:
+                raise Conflict("ese nombre ya está en uso: elige otro")
+            if sum(1 for _ in self.repo.accounts()) >= self.max_accounts:
+                raise RateLimited("la sala está llena")
+            if not self.entries.allow("global"):
+                raise RateLimited("están entrando demasiadas personas a la vez: reintenta en un minuto")
+            token = secrets.token_urlsafe(24)
+            acc = Account(name, self.starting_balance, credential=self._digest(token))
+            self.repo.add_account(acc)
+            return {"name": name, "token": token} | account_view(acc)
 
     # --- escrituras -------------------------------------------------------------
-    def create(self, question: str, criteria: str, b: float = 100.0,
-               kind: str = "presente", threshold: float = 0.5) -> dict:
-        m = Market(self.new_id(), question, criteria, b=b, kind=kind, threshold=threshold)
+    def create(self, question: str, criteria: str, b: float = 100.0, kind: str = "presente",
+               threshold: float = 0.5, predicate: str | None = None) -> dict:
+        if kind == "simulacion" and self.judge is None:
+            raise MarketError("no hay simulación conectada")
+        m = Market(self.new_id(), question, criteria, b=b, kind=kind, threshold=threshold,
+                   predicate=predicate)
         with self.repo.transaction():
             self.repo.add_market(m)
             return market_view(m)
 
-    def trade(self, market_id: str, user: str, outcome: str, amount: float) -> dict:
+    def trade(self, market_id: str, user: str, token: str, outcome: str, amount: float) -> dict:
         with self.repo.transaction():
+            acc = self._authenticate(user, token)
+            self._throttle(acc)
             m = self._market(market_id)
             m.ensure_open()
-            acc = self._account(user)
             if amount > acc.balance:
                 raise MarketError("saldo insuficiente")
             shares = m.buy(outcome, amount)
@@ -79,10 +117,12 @@ class MarketService:
             acc.add_shares(m.id, outcome, shares)
             return {"market": market_view(m), "user": account_view(acc), "shares": shares}
 
-    def answer_census(self, market_id: str, user: str, answer: bool) -> dict:
+    def answer_census(self, market_id: str, user: str, token: str, answer: bool) -> dict:
         with self.repo.transaction():
+            acc = self._authenticate(user, token)
+            self._throttle(acc)
             m = self._market(market_id)
-            m.answer_census(self._account(user).name, answer)
+            m.answer_census(acc.name, answer)
             return {"census_count": len(m.census)}
 
     async def resolve(self, market_id: str, fault: str | None = None) -> dict:
@@ -93,7 +133,7 @@ class MarketService:
             m.ensure_open()
             now = self.clock()
             wait = self.cooldown - (now - m.last_consulted_at)
-            if not m.resolved_by_census and wait > 0:
+            if m.kind in ("presente", "futuro") and wait > 0:
                 raise Cooldown(f"espera {int(wait) + 1} s antes de volver a consultar al oráculo")
             m.last_consulted_at = now
             # Lo que la sala creía justo antes de ver la evidencia.
@@ -101,7 +141,9 @@ class MarketService:
             if m.resolved_by_census:
                 verdict = self.census.tally(list(m.census.values()), m.threshold)
 
-        if not m.resolved_by_census:
+        if m.resolved_by_simulation:
+            verdict = self.judge.judge(m.predicate)  # type: ignore[union-attr,arg-type]
+        elif not m.resolved_by_census:
             # Fuera de la transacción: la llamada tarda y el mercado sigue operando.
             verdict = await self.oracle.resolve(m.question, m.criteria, fault)
 

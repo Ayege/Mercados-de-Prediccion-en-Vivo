@@ -1,4 +1,4 @@
-# Lo que NO se sube a Cloud Build. La imagen solo necesita app/, requirements.txt y el Dockerfile.
+# Lo que NO se sube a Cloud Build. tests/ sí se sube: el pipeline corre las pruebas antes de construir.
 .gcloudignore
 .git
 .gitignore
@@ -12,5 +12,4 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
-tests/
 docs/

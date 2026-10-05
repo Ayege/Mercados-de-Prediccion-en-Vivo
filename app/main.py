@@ -3,12 +3,23 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from .adapters.google_auth import verify_google_oidc
+from .adapters.infra.cloudrun import CloudRunNodeGateway
+from .adapters.infra.fake import FakeNodeGateway
 from .adapters.memory import InMemoryRepository
 from .adapters.oracle.mock import MockOracle
 from .adapters.oracle.vertex import VertexOracle
-from .application.ports import OracleGateway
+from .adapters.topology.mock import MockTopologyGenerator
+from .adapters.topology.vertex import VertexTopologyGenerator
+from .adapters.vertex_client import VertexClient
+from .application.cloud import CloudService
+from .application.infra import InfraController
+from .application.judges import CompositeJudge
+from .application.ports import OracleGateway, TopologyGenerator
 from .application.service import MarketService
 from .config import Settings
+from .domain.cloud.infra import ActuationPolicy
+from .domain.cloud.simulation import Simulation
 from .domain.verdict import AcceptancePolicy, CensusPolicy
 from .entrypoints.http.api import create_app
 from .seeds import seed
@@ -17,27 +28,75 @@ from .seeds import seed
 def build_oracle(settings: Settings) -> OracleGateway:
     policy = AcceptancePolicy(settings.min_confidence, settings.min_sources)
     if settings.uses_vertex:
-        return VertexOracle(settings.project, settings.location, settings.model, policy)
+        return VertexOracle(VertexClient(settings.project, settings.location, settings.model), policy)
     return MockOracle(policy)
 
 
-def build_service(settings: Settings, oracle: OracleGateway | None = None) -> MarketService:
+def build_generator(settings: Settings) -> TopologyGenerator:
+    if settings.uses_vertex:
+        return VertexTopologyGenerator(VertexClient(settings.project, settings.location, settings.model))
+    return MockTopologyGenerator()
+
+
+def build_cloud(settings: Settings) -> CloudService:
+    sim = Simulation(seed=settings.sim_seed, n_agents=settings.sim_agents)
+    return CloudService(sim, build_generator(settings), settings.tick_seconds)
+
+
+def build_infra(settings: Settings, cloud: CloudService) -> InfraController | None:
+    """La infraestructura real solo existe si se pide explícitamente."""
+    mode = settings.infra_mode
+    if mode == "apagado":
+        return None
+    if mode == "ensayo":
+        gateway = FakeNodeGateway()
+    elif mode in ("plan", "real"):
+        required = {"GOOGLE_CLOUD_PROJECT": settings.project, "NODO_IMAGEN": settings.node_image,
+                    "NODO_CUENTA": settings.node_service_account}
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise RuntimeError(f"INFRA_MODE={mode} necesita {', '.join(missing)}")
+        gateway = CloudRunNodeGateway(settings.project, settings.node_image,
+                                      settings.node_service_account, validate_only=mode == "plan")
+    else:
+        raise RuntimeError(f"INFRA_MODE desconocido: {mode} (apagado | ensayo | plan | real)")
+    policy = ActuationPolicy(max_total_min=settings.infra_max_total_min,
+                             max_max_per_region=settings.infra_max_per_region,
+                             max_services=settings.infra_max_services)
+    return InfraController(gateway, lambda: dict(cloud.sim.topology), mode, policy,
+                           settings.rps_per_instance, settings.infra_interval, ttl=settings.infra_ttl)
+
+
+def build_service(settings: Settings, oracle: OracleGateway | None = None,
+                  cloud: CloudService | None = None, infra: InfraController | None = None) -> MarketService:
     return MarketService(
         InMemoryRepository(),
         oracle or build_oracle(settings),
         CensusPolicy(settings.min_census),
+        judge=CompositeJudge(cloud, infra) if cloud else None,
         starting_balance=settings.starting_balance,
         oracle_cooldown=settings.oracle_cooldown,
     )
 
 
 def build(settings: Settings | None = None, service: MarketService | None = None,
+          cloud: CloudService | None = None, infra: InfraController | None = None,
           with_seed: bool = True) -> FastAPI:
+    """Si pasas `service`, pasa también la `cloud` y la `infra` que usa como juez."""
     settings = settings or Settings.from_env()
-    service = service or build_service(settings)
+    settings.check()
+    cloud = cloud or build_cloud(settings)
+    if infra is None and service is None:
+        infra = build_infra(settings, cloud)
+    service = service or build_service(settings, cloud=cloud, infra=infra)
     if with_seed:
         seed(service, settings.seed_set)
-    return create_app(service, settings.presenter_key, settings.revision)
+    scheduler_check = None
+    if settings.vigil_account:
+        async def scheduler_check(token: str) -> bool:
+            return await verify_google_oidc(token, settings.vigil_audience, settings.vigil_account)
+    return create_app(service, cloud, infra, settings.presenter_key, settings.revision,
+                      docs=settings.api_docs, scheduler_check=scheduler_check)
 
 
 app = build()

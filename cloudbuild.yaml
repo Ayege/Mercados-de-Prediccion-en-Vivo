@@ -1,0 +1,73 @@
+# Pipeline de CI/CD con la seguridad desplazada a la izquierda: cada control es una
+# compuerta. Si uno falla, los siguientes no corren y nada llega a producción.
+#
+#   secretos → análisis estático → dependencias → pruebas → imagen → escaneo → publicar → desplegar
+#
+# Manual:   gcloud builds submit --config cloudbuild.yaml --region us-east1
+# Trigger:  ver "CI/CD con Cloud Build" en el README.
+#
+# El despliegue cambia la imagen de la API y de los nodos. Las demás variables y el
+# secreto PRESENTER_KEY se conservan de la revisión anterior.
+
+substitutions:
+  _REGION: us-east1
+  _SERVICE: oraculo-api
+  _REPO: oraculo
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+
+steps:
+  - id: secretos
+    name: zricethezav/gitleaks:v8.21.2
+    args: ["dir", ".", "--redact", "--no-banner", "--exit-code", "1"]
+
+  - id: analisis-y-dependencias
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        pip install -q --require-hashes -r requirements.lock
+        pip install -q -r requirements-dev.txt
+        ruff check .                                  # incluye las reglas S (bandit)
+        pip-audit --require-hashes -r requirements.lock
+        pytest -q                                     # incluye tests/security y la arquitectura
+
+  - id: imagen
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+
+  - id: escaneo-de-imagen
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker save "${_IMAGE}" -o /workspace/imagen.tar
+        # Falla con vulnerabilidades ALTAS o CRÍTICAS que ya tienen arreglo publicado.
+        docker run --rm -v /workspace:/workspace aquasec/trivy:0.57.1 image \
+          --input /workspace/imagen.tar --severity HIGH,CRITICAL --ignore-unfixed \
+          --exit-code 1 --no-progress --scanners vuln
+
+  - id: publicar
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}"]
+
+  - id: desplegar
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_IMAGE}
+      - --region=${_REGION}
+      - --update-env-vars=NODO_IMAGEN=${_IMAGE}
+
+images:
+  - ${_IMAGE}
