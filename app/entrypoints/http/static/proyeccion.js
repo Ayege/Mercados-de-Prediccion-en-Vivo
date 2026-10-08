@@ -254,7 +254,7 @@ async function pintarNoticias() {
   document.getElementById("medios").innerHTML = medios.ready
     ? `Lista de medios${medios.rehearsal ? " <strong>de ensayo (ficticios)</strong>" : ""}: izquierda: ${esc(lados("izquierda"))} ·
        derecha: ${esc(lados("derecha"))}.${medios.source ? ` Clasificación: ${esc(medios.source)}.` : ""}
-       El modelo propone la pregunta; los titulares se verifican en la página de cada medio.`
+       Los titulares vienen de Google News, que los atribuye a cada medio; el modelo solo elige cuáles y propone la pregunta.`
     : `<span class="pendiente">Falta la lista de medios.</span> Define al menos un medio de izquierda y uno de derecha
        en <code>app/medios.json</code>, con la fuente de cada clasificación.`;
   document.getElementById("borradores").innerHTML = v.drafts.map(borrador).join("");

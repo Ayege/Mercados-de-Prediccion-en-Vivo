@@ -55,7 +55,7 @@ def test_policy_accepts_a_question_with_both_sides():
 
 
 @pytest.mark.parametrize("raw, articles, why", [
-    (None, [art(LEFT), art(RIGHT)], "no propuso"),
+    (None, [art(LEFT), art(RIGHT)], "no hay pregunta"),
     ({**RAW, "pregunta": "Una afirmación"}, [art(LEFT), art(RIGHT)], "sí o no"),
     ({**RAW, "tipo": "opinion"}, [art(LEFT), art(RIGHT)], "tipo inválido"),
     (RAW, [art(LEFT), art(LEFT, 2)], "de derecha"),

@@ -42,7 +42,7 @@ def framing_view(m: Market) -> dict | None:
 
 def article_view(a: Article) -> dict:
     return {"headline": a.headline, "url": a.url, "outlet": a.outlet.name, "lean": a.outlet.lean,
-            "source": a.outlet.source}
+            "source": a.outlet.source, "via": a.via or None}
 
 
 def draft_view(d: NewsDraft) -> dict:

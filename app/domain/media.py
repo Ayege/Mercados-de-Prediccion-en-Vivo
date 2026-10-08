@@ -10,8 +10,9 @@ derecha, ambas, ninguna), estiman la probabilidad del SÍ y apuestan en el mismo
 mercado que la sala. Lo que se ve es cuánto separa la dieta las creencias, y
 al resolver, qué dieta ganó dinero.
 
-Un titular nunca lo escribe el modelo: es el título de la página del medio,
-descargada por el servidor. Si no se pudo verificar, no existe.
+Un titular nunca lo escribe el modelo: sale de un índice de noticias (Google
+News), que lo atribuye al medio que lo publicó. El modelo solo elige titulares
+por su número; no puede escribirlos ni cambiarlos.
 """
 from __future__ import annotations
 
@@ -27,6 +28,8 @@ DIETS = {"izquierda": ("izquierda",), "derecha": ("derecha",), "ambas": LEANS, "
 # Los agentes llevan «:» en el nombre, que la audiencia no puede usar: nadie los suplanta.
 AGENTS = {f"agente:{d}": d for d in DIETS}
 DOMAIN = re.compile(r"^(?=.{3,80}$)([a-z0-9-]+\.)+[a-z]{2,}$")
+# Índices de noticias aceptados: quién atribuye el titular al medio, y el host de sus enlaces.
+INDEXES = {"Google News": "news.google.com"}
 
 
 def host_of(url: str) -> str:
@@ -76,14 +79,22 @@ class MediaList:
 
 @dataclass(frozen=True)
 class Article:
-    """Un titular verificado: el título de una página real de un medio de la lista."""
+    """Un titular real de un medio de la lista.
+
+    Sin `via`, el enlace es la página del propio medio. Con `via`, el titular y su
+    atribución al medio vienen de ese índice de noticias, y el enlace es el suyo.
+    """
 
     headline: str
     url: str
     outlet: Outlet
+    via: str = ""
 
     def __post_init__(self) -> None:
-        if not self.outlet.owns(host_of(self.url)):
+        if self.via:
+            if host_of(self.url) != INDEXES.get(self.via):
+                raise MarketError("el enlace no pertenece al índice que atribuye el titular")
+        elif not self.outlet.owns(host_of(self.url)):
             raise MarketError("el enlace no pertenece al medio")
         if not 8 <= len(self.headline) <= 300:
             raise MarketError("titular de largo inválido")
@@ -130,7 +141,8 @@ class NewsPolicy:
                     for lean in LEANS}
         problems = []
         if find.raw is None:
-            problems.append("el modelo no propuso una pregunta")
+            trace.append("política: no hay pregunta propuesta → rechazada (fail-closed)")
+            return NewsDraft(draft_id, topic, "", "", "", [], False, trace, find.model)
         if not (8 <= len(question) and question.endswith("?")):
             problems.append("la pregunta no es una pregunta de sí o no")
         if len(criteria) < 8:
@@ -139,7 +151,7 @@ class NewsPolicy:
             problems.append(f"tipo inválido «{kind}» (presente | futuro)")
         for lean, found in articles.items():
             if len(found) < self.min_per_side:
-                problems.append(f"no hay titulares verificados de medios de {lean}")
+                problems.append(f"no hay titulares de medios de {lean}")
         for p in problems:
             trace.append(f"política: {p}")
         accepted = not problems

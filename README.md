@@ -147,15 +147,17 @@ dispone*, aplicado ahora a la manipulación por redacción.
 Las preguntas no son fijas: nacen de las noticias. En la proyección, el ponente
 escribe un tema y pulsa «Buscar noticias».
 
-1. **El editor (Gemini con grounding)** busca noticias recientes del tema en los
-   medios de tu lista, de los dos lados, y propone una pregunta de sí o no
-   verificable, con criterio y fecha.
-2. **Cada titular se verifica.** El servidor descarga la página del medio y usa
-   el título que el medio publicó (`og:title` o `<title>`). El modelo puede
-   proponer enlaces, pero nunca escribe titulares: si una página no carga, no es
-   de un medio de la lista o redirige fuera de ella, el artículo no existe.
+1. **Búsqueda (Google News).** El servidor busca el tema en el RSS de Google
+   News, una vez por lado, solo en los medios de la lista (`site:`) y solo en
+   los últimos 7 días. Google News atribuye cada titular a su medio; un titular
+   de un medio que no está en la lista se descarta. Las ediciones en español
+   cuentan como su medio (cnnespanol.cnn.com es CNN). Tarda un par de segundos.
+2. **El editor (Gemini, sin buscar)** recibe esos titulares numerados, en dos
+   grupos A y B (no sabe cuál es izquierda o derecha), y propone una pregunta de
+   sí o no verificable sobre un asunto que cubran los dos grupos. Para citar un
+   titular solo puede dar su número: no puede escribirlo ni cambiarlo.
 3. **`NewsPolicy` decide si el borrador sirve:** pregunta de sí o no, criterio,
-   tipo, y al menos un titular verificado de izquierda y uno de derecha. Si no,
+   tipo, y al menos un titular de izquierda y uno de derecha. Si no,
    queda rechazado con su traza y se busca otra vez.
 4. **El ponente abre la pregunta.** La sala apuesta como en cualquier otra.
 5. **«Que opinen los agentes».** Cuatro agentes Gemini leen la misma cobertura,
@@ -170,16 +172,20 @@ Lo que enseña: con los mismos hechos disponibles, la dieta de medios separa las
 creencias, y quien apuesta mueve el precio que ve la sala. Como los agentes
 apuestan en orden, el último fija el precio; la pantalla lo dice.
 
-Cuesta una llamada a Gemini por búsqueda y cuatro cuando opinan los agentes,
-siempre a pedido del ponente. Hay una búsqueda cada 30 s como máximo y los
-agentes opinan una sola vez por pregunta.
+Cuesta una llamada a Gemini por búsqueda (unos 20–60 s) y cuatro cuando opinan
+los agentes (unos 30 s, en paralelo), siempre a pedido del ponente. Hay una
+búsqueda cada 30 s como máximo y los agentes opinan una sola vez por pregunta.
+
+Lo que se vio en la primera prueba real (inmigración, octubre de 2026): las
+cuatro dietas creyeron entre 80 y 88 %. El agente que no leyó nada respondió con
+lo que ya sabía. Un LLM no es una hoja en blanco, y eso también hay que decirlo:
+la dieta mueve a los agentes en algunos temas y casi nada en otros.
 
 #### Tu lista de medios
 
-La inclinación de cada medio **la defines tú** en
-[`app/medios.json`](app/medios.json) (u otro archivo con `MEDIOS_ARCHIVO`). Ni
-el código ni el modelo clasifican medios. Cada entrada lleva la fuente de su
-clasificación, y la proyección cita la lista:
+La inclinación de cada medio vive en [`app/medios.json`](app/medios.json) (u
+otro archivo con `MEDIOS_ARCHIVO`). Ni el código ni el modelo clasifican medios:
+cada entrada cita una fuente publicada, y la proyección cita la lista.
 
 ```json
 {
@@ -191,11 +197,27 @@ clasificación, y la proyección cita la lista:
 }
 ```
 
-- Hace falta al menos un medio de cada lado. Mientras la lista esté vacía (así
-  viene), en producción la búsqueda se niega a correr y la proyección lo dice.
-- En ensayo (sin Vertex AI) se usan dos medios **ficticios**, con dominios
-  `.example` y titulares marcados `[Ensayo]`. El editor simulado nunca pone
-  palabras en la boca de un medio real, aunque tu lista tenga medios reales.
+- Hace falta al menos un medio de cada lado. Si la lista queda vacía, en
+  producción la búsqueda se niega a correr y la proyección lo dice.
+- En ensayo (sin Vertex AI) se usan siempre dos medios **ficticios**, con
+  dominios `.example` y titulares marcados `[Ensayo]`. El editor simulado nunca
+  pone palabras en la boca de un medio real.
+
+La lista que viene incluye 12 medios, 6 de cada lado, y cada uno cita su fuente:
+
+| Lado | Medios | Fuente |
+| --- | --- | --- |
+| Izquierda | laSexta | Masip, Suau y Ruiz-Caballero (2020), *Profesional de la información*: la ciudadanía de izquierda confía en ella significativamente más |
+| Izquierda | Público, infoLibre | CIS, *Estudio sobre audiencias de medios de comunicación social* (noviembre de 2023): la ciudadanía los ubica a la izquierda |
+| Izquierda | CNN, The New York Times (Lean Left), The Guardian (Left) | AllSides Media Bias Chart (2024) |
+| Derecha | ABC, El Mundo, La Razón, OKDiario | Masip et al. (2020): la ciudadanía de derecha confía en ellos significativamente más |
+| Derecha | Fox News (Right), New York Post (Lean Right) | AllSides Media Bias Chart (2024) |
+
+Es binaria («izquierda» incluye centroizquierda) y mide percepción de las
+audiencias, no exactitud. Quedan fuera los medios que esas fuentes ubican como
+punto de equilibrio (El País, TVE) o al centro (WSJ), y los que no tienen una
+clasificación publicada que se pueda citar, entre ellos los dominicanos. Si
+quieres medios dominicanos, añádelos con la fuente de su clasificación.
 - Cambiar la lista exige una nueva imagen (`gcloud builds submit`).
 
 ### 4. Credulidad en el laboratorio (simulado)
@@ -392,8 +414,8 @@ mismo y que nadie sepa del grupo: prácticas, hábitos, incidentes recientes.
    le pasa el titular como hecho, el modelo cambia de opinión y el código se
    niega a resolver.
 5. **Las noticias de hoy (10 min).** Pide un tema a la sala y escríbelo en
-   «Pregunta desde las noticias». Lee la traza: qué enlaces propuso el modelo y
-   cuáles se verificaron. Abre la pregunta, deja que la sala apueste y pulsa
+   «Pregunta desde las noticias». Lee la traza: cuántos titulares trajo cada
+   lado y cuáles eligió el modelo. Abre la pregunta, deja que la sala apueste y pulsa
    «Que opinen los agentes». Señala cómo se separan las creencias según la dieta.
 6. **Cierre (5 min).** La tabla de «qué afirmar». Si combinaste con `nube`, pasa
    a `/nube.html` y publica un rumor alarmista.
@@ -473,7 +495,7 @@ app/
 │   ├── infra/           Nodos y agentes: Cloud Run (Admin API v2) y nube de ensayo
 │   ├── prices.py        Precios de Cloud Run: catálogo de Cloud Billing o foto fija
 │   ├── topology/        Generadores de topologías: Vertex AI y simulado
-│   ├── news/            Editor y lectores (Vertex AI y simulados), verificación de páginas, lista de medios
+│   ├── news/            Búsqueda en Google News, editor y lectores (Vertex AI y simulados), lista de medios
 │   └── oracle/
 │       ├── gemini.py    Ruta común: run → inject_fault → interpret → política
 │       ├── vertex.py    Gemini en Vertex AI con grounding; titulares como dato no confiable
@@ -483,7 +505,7 @@ app/
 ├── node.py              El nodo real: /salud (con NODO_FALLA) y /trabajo, lo que venden los agentes
 ├── config.py            Settings: el único que lee el entorno; falla cerrado en producción
 ├── seeds.py             Juegos de preguntas (SEED_SET)
-├── medios.json          Tu lista de medios y su inclinación (viene vacía)
+├── medios.json          La lista de medios y su inclinación, con la fuente de cada una
 └── main.py              Raíz de composición: conecta las capas
 ```
 
@@ -502,7 +524,7 @@ capas:
 | --- | --- | --- |
 | `tests/domain/` | LMSR, entidades, políticas (encuadre y noticias), la asignación al azar, cuánto apuesta un agente, cada técnica de la nube y la economía del mercado real | Python puro, sin dobles, semillas fijas |
 | `tests/application/` | Casos de uso (las tres lecturas del oráculo, qué titular ve cada quien, la dieta de cada agente, qué dieta ganó), el controlador de infraestructura y el mercado real | Oráculo, editor, lectores y nube de ensayo falsos, reloj controlado |
-| `tests/adapters/` | Grounding, cada fallo inyectado, dónde pone Vertex el titular, la verificación de páginas (lista, redirecciones, títulos), la Admin API de Cloud Run y el catálogo de precios | Payloads grabados, transporte HTTP simulado y SKUs reales en `fixtures/`, sin red |
+| `tests/adapters/` | Grounding, cada fallo inyectado, dónde pone Vertex el titular, la búsqueda en Google News (atribución, lista, enlaces), que el editor solo elija por número, la Admin API de Cloud Run y el catálogo de precios | Payloads grabados, transporte HTTP simulado y SKUs reales en `fixtures/`, sin red |
 | `tests/entrypoints/` | API de punta a punta, incluidas `/api/infra`, `revelar` y los juegos de preguntas | `TestClient` con el oráculo simulado y la nube de ensayo |
 | `tests/security/` | Cada control de [SECURITY.md](SECURITY.md) | Recorre las rutas y los archivos estáticos |
 | `tests/test_docs.py` | Que `docs/ARQUITECTURA.md` coincida con los `.mmd` y que los enlaces locales existan | Sin red |
@@ -591,9 +613,9 @@ turno del usuario, marcado como dato no confiable. Nunca en la instrucción de
 sistema (eso es exactamente el fallo `noticia_como_verdad`).
 
 **Un titular lo publica el medio, no el modelo.** El texto que se muestra de un
-medio real es el título de su página, descargada por el servidor. El servidor
-solo descarga dominios de tu lista. Y la inclinación de cada medio la decide tu
-lista, no el código ni el modelo.
+medio real viene de Google News, que lo atribuye al medio. El modelo solo elige
+titulares por su número. Y la inclinación de cada medio la decide la lista, que
+cita una fuente publicada para cada uno, no el código ni el modelo.
 
 **El experimento de encuadre no expone a nadie.** La asignación vive en el
 mercado y solo salen agregados por grupo. Los titulares no se publican hasta
@@ -858,8 +880,8 @@ aceptados están en [SECURITY.md](SECURITY.md). En resumen:
   ser `https`.
 - **El modelo:** componente no confiable; las políticas en código deciden. Los
   titulares le llegan como dato, nunca como instrucción.
-- **Descargas:** el servidor solo descarga páginas de los medios de tu lista,
-  por https, revalidando cada redirección, con límite de tiempo y tamaño.
+- **Descargas:** el servidor solo descarga el RSS de búsqueda de Google News,
+  sin seguir redirecciones, con límite de tiempo y tamaño.
 - **La nube:** `ActuationPolicy`, identidades con permisos mínimos, nodos
   privados y sin roles.
 - **Cadena de suministro:** lock con hashes, imagen base por digest y Trivy.

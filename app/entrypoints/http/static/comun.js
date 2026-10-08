@@ -55,7 +55,7 @@ const DIETAS = { izquierda: "solo medios de izquierda", derecha: "solo medios de
 
 function cobertura(articulos) {
   const lado = l => articulos.filter(a => a.lean === l).map(a => `<li><a href="${esc(a.url)}" rel="noopener noreferrer"
-      target="_blank">${esc(a.headline)}</a> <span class="tenue">— ${esc(a.outlet)}</span></li>`).join("")
+      target="_blank">${esc(a.headline)}</a> <span class="tenue">— ${esc(a.outlet)}${a.via ? ` · vía ${esc(a.via)}` : ""}</span></li>`).join("")
     || `<li class="tenue">sin titulares</li>`;
   return `<div class="cobertura">
     <div><strong class="pequeno lado-izquierda">Izquierda</strong><ul class="pequeno">${lado("izquierda")}</ul></div>

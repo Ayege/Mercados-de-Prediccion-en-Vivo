@@ -81,14 +81,15 @@ def build_infra(settings: Settings, cloud: CloudService) -> InfraController | No
 
 
 def build_news(settings: Settings, service: MarketService) -> NewsService:
-    """En ensayo, sin lista propia, se usan dos medios ficticios. En producción, solo la lista."""
+    """En producción, la lista de medios. En ensayo, siempre dos medios ficticios: el editor
+    simulado inventa titulares, y nunca deben aparecer junto a nombres de medios reales."""
     media = media_list.load(settings.media_file)
     if settings.uses_vertex:
         client = VertexClient(settings.project, settings.location, settings.model)
         desk, reader = VertexNewsDesk(client), VertexNewsReader(client)
     else:
         desk, reader = MockNewsDesk(), MockNewsReader()
-        media = media if media.ready else REHEARSAL
+        media = REHEARSAL
     return NewsService(service, desk, reader, media, agent_budget=settings.agent_budget,
                        cooldown=settings.oracle_cooldown)
 

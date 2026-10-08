@@ -1,11 +1,36 @@
 {
   "_instrucciones": [
-    "Esta lista la defines tú. El código no clasifica medios y el modelo tampoco.",
-    "Pon al menos un medio de izquierda y uno de derecha. 'inclinacion' es 'izquierda' o 'derecha'.",
-    "'fuente' es de dónde sale esa clasificación (un estudio, un índice, tu criterio declarado): la proyección la muestra.",
-    "Mientras esté vacía, en producción la búsqueda de noticias se niega a correr; en ensayo se usan dos medios ficticios.",
-    "Ejemplo de entrada: {\"nombre\": \"Medio A\", \"dominio\": \"medio-a.com\", \"inclinacion\": \"izquierda\", \"fuente\": \"…\"}"
+    "Cada medio cita de dónde sale su clasificación; ni el código ni el modelo clasifican medios.",
+    "La lista es binaria: «izquierda» agrupa izquierda y centroizquierda; «derecha», derecha y centroderecha.",
+    "Las clasificaciones miden percepción o afinidad de audiencias, no exactitud ni calidad periodística.",
+    "Quedan fuera los medios que esas fuentes ubican al centro o como punto de equilibrio (El País, TVE, WSJ) y los que no tienen una clasificación publicada que se pueda citar (incluidos los medios dominicanos).",
+    "Formato: {\"nombre\", \"dominio\", \"inclinacion\": \"izquierda\" | \"derecha\", \"fuente\"}."
   ],
-  "fuente": "",
-  "medios": []
+  "fuente": "España: Masip, Suau y Ruiz-Caballero (2020), Profesional de la información 29(5), doi:10.3145/epi.2020.sep.27, y CIS, Estudio sobre audiencias de medios de comunicación social (noviembre de 2023). EE. UU.: AllSides Media Bias Chart (2024). Lista binaria; mide percepción de audiencias, no calidad.",
+  "medios": [
+    {"nombre": "laSexta", "dominio": "lasexta.com", "inclinacion": "izquierda",
+     "fuente": "Masip et al. 2020: la ciudadanía de izquierda y centroizquierda confía en ella significativamente más que la de derecha"},
+    {"nombre": "Público", "dominio": "publico.es", "inclinacion": "izquierda",
+     "fuente": "CIS, audiencias de medios (nov. 2023): la ciudadanía lo ubica a la izquierda"},
+    {"nombre": "infoLibre", "dominio": "infolibre.es", "inclinacion": "izquierda",
+     "fuente": "CIS, audiencias de medios (nov. 2023): la ciudadanía lo ubica a la izquierda"},
+    {"nombre": "CNN", "dominio": "cnn.com", "inclinacion": "izquierda",
+     "fuente": "AllSides 2024: Lean Left (contenido político en línea de EE. UU.)"},
+    {"nombre": "The New York Times", "dominio": "nytimes.com", "inclinacion": "izquierda",
+     "fuente": "AllSides 2024: Lean Left (contenido político en línea de EE. UU.)"},
+    {"nombre": "The Guardian", "dominio": "theguardian.com", "inclinacion": "izquierda",
+     "fuente": "AllSides 2024: Left (contenido político en línea de EE. UU.)"},
+    {"nombre": "ABC", "dominio": "abc.es", "inclinacion": "derecha",
+     "fuente": "Masip et al. 2020: la ciudadanía de derecha y centroderecha confía en él significativamente más que la de izquierda"},
+    {"nombre": "El Mundo", "dominio": "elmundo.es", "inclinacion": "derecha",
+     "fuente": "Masip et al. 2020: la ciudadanía de derecha y centroderecha confía en él significativamente más que la de izquierda"},
+    {"nombre": "La Razón", "dominio": "larazon.es", "inclinacion": "derecha",
+     "fuente": "Masip et al. 2020: la ciudadanía de derecha y centroderecha confía en ella significativamente más que la de izquierda"},
+    {"nombre": "OKDiario", "dominio": "okdiario.com", "inclinacion": "derecha",
+     "fuente": "Masip et al. 2020: la ciudadanía de derecha y centroderecha confía en él significativamente más que la de izquierda"},
+    {"nombre": "Fox News", "dominio": "foxnews.com", "inclinacion": "derecha",
+     "fuente": "AllSides 2024: Right (contenido político en línea de EE. UU.)"},
+    {"nombre": "New York Post", "dominio": "nypost.com", "inclinacion": "derecha",
+     "fuente": "AllSides 2024: Lean Right (contenido político en línea de EE. UU.)"}
+  ]
 }
