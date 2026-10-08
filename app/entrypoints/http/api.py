@@ -24,11 +24,12 @@ from fastapi.staticfiles import StaticFiles
 from ...application.cloud import CloudService
 from ...application.errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
 from ...application.infra import InfraController
+from ...application.news import NewsService
 from ...application.ports import FAULTS, FRAMING_FAULTS
 from ...application.service import MarketService
 from ...domain.errors import MarketError, SimulationError
 from ...domain.framing import Framing, Headline
-from .schemas import CensusAnswer, Enter, FramingIn, InjectFault, NewMarket, RealFault, Trade
+from .schemas import CensusAnswer, Enter, FramingIn, InjectFault, NewMarket, RealFault, Topic, Trade
 
 STATIC = Path(__file__).parent / "static"
 Fault = Literal[tuple(FAULTS | FRAMING_FAULTS)]  # type: ignore[valid-type]
@@ -59,7 +60,7 @@ SchedulerCheck = Callable[[str], Awaitable[bool]]
 
 def create_app(service: MarketService, cloud: CloudService, infra: InfraController | None = None,
                presenter_key: str = "", revision: str = "local", docs: bool = True,
-               scheduler_check: SchedulerCheck | None = None) -> FastAPI:
+               scheduler_check: SchedulerCheck | None = None, news: NewsService | None = None) -> FastAPI:
     app = FastAPI(title="Oráculo — mercados de predicción", docs_url="/api/docs" if docs else None,
                   redoc_url=None, openapi_url="/openapi.json" if docs else None)
 
@@ -112,6 +113,7 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
         return {"oracle": o.name, "model": o.model, "revision": revision,
                 "faults": FAULTS, "framing_faults": FRAMING_FAULTS,
                 "presenter_key_required": bool(presenter_key),
+                "news": news.media.summary() if news else None,
                 "infra": infra.mode if infra else "apagado"}
 
     # --- audiencia ---------------------------------------------------------------
@@ -152,6 +154,34 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
     @app.post("/api/markets/{market_id}/resolve", dependencies=[Depends(presenter_only)])
     async def resolve(market_id: str, fault: Fault | None = None):
         return await service.resolve(market_id, fault)
+
+    # --- ponente: preguntas desde las noticias -------------------------------------
+    def need_news() -> NewsService:
+        if news is None:
+            raise HTTPException(409, "las preguntas desde noticias no están conectadas")
+        return news
+
+    @app.get("/api/noticias", dependencies=[Depends(presenter_only)])
+    def news_view():
+        return need_news().view()
+
+    @app.post("/api/noticias/borradores", status_code=201, dependencies=[Depends(presenter_only)])
+    async def news_propose(body: Topic):
+        return await need_news().propose(body.topic.strip())
+
+    @app.post("/api/noticias/borradores/{draft_id}/abrir", status_code=201,
+              dependencies=[Depends(presenter_only)])
+    def news_open(draft_id: str):
+        return need_news().open(draft_id)
+
+    @app.delete("/api/noticias/borradores/{draft_id}", status_code=204,
+                dependencies=[Depends(presenter_only)])
+    def news_discard(draft_id: str):
+        need_news().discard(draft_id)
+
+    @app.post("/api/markets/{market_id}/agentes", dependencies=[Depends(presenter_only)])
+    async def news_agents(market_id: str):
+        return await need_news().consult_agents(market_id)
 
     # --- nube simulada -----------------------------------------------------------
     @app.get("/api/nube")

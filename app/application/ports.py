@@ -10,6 +10,7 @@ from ..domain.cloud.real_market import AgentState, PriceTable, WorkResult
 from ..domain.cloud.topology import Draft
 from ..domain.framing import News
 from ..domain.market import Account, Market
+from ..domain.media import Article, Estimate, MediaList, NewsFind
 from ..domain.verdict import Verdict
 
 # Fallos que el ponente puede pedirle a cualquier oráculo para ensayar la política
@@ -121,3 +122,28 @@ class AgentGateway(Protocol):
     async def delete_agent(self, agent_id: str, region: str) -> str: ...
 
     async def work(self, state: AgentState, n: int) -> list[WorkResult]: ...
+
+
+class NewsDesk(Protocol):
+    """Un modelo que busca noticias del día sobre un tema y propone una pregunta.
+
+    Contrato: nunca lanza. Solo devuelve artículos verificados: páginas reales de
+    medios de la lista, con el título que el propio medio publicó.
+    """
+
+    name: str
+    model: str
+
+    async def find(self, topic: str, media: MediaList) -> NewsFind: ...
+
+
+class NewsReader(Protocol):
+    """Un agente que solo sabe lo que dicen los titulares que le tocan y estima P(SÍ).
+
+    Contrato: nunca lanza. Si falla, devuelve un Estimate con `p=None` y el agente no apuesta.
+    """
+
+    name: str
+    model: str
+
+    async def estimate(self, question: str, criteria: str, articles: list[Article]) -> Estimate: ...

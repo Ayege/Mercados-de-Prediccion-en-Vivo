@@ -15,6 +15,9 @@
   .traza { font: .8rem/1.5 ui-monospace, Menlo, monospace; margin: 0; padding-left: 1.1rem; }
   .intentos { list-style: none; padding: 0; margin: 0; font-size: .85rem; }
   .intentos li { padding: .15rem 0; }
+  .agentes { border-top: 1px solid var(--borde); padding-top: .5rem; }
+  .agente-fila { padding: .45rem 0; border-bottom: 1px dashed var(--borde); }
+  .borrador { border-top: 1px dashed var(--borde); padding-top: .6rem; margin-top: .6rem; }
   .encuadre { border-top: 1px solid var(--borde); padding-top: .5rem; }
   .ponente { border-top: 1px dashed var(--borde); padding-top: .6rem; margin-top: auto; }
   .pie { margin-top: 1.5rem; }
@@ -28,6 +31,16 @@
     titular a la sala y al modelo.</p>
   <p class="tenue pequeno" id="info"></p>
   <p class="error" id="error" role="alert"></p>
+  <section class="tarjeta" id="noticias" hidden>
+    <h2 style="margin-top:0">Pregunta desde las noticias</h2>
+    <p class="pequeno tenue" id="medios"></p>
+    <form class="fila" id="buscar-noticias">
+      <input id="tema" maxlength="80" minlength="3" required placeholder="Tema, por ejemplo: tasa de interés"
+        aria-label="Tema de las noticias">
+      <button>Buscar noticias</button>
+    </form>
+    <div id="borradores"></div>
+  </section>
   <div class="rejilla" id="lista"></div>
   <p class="pie tenue pequeno">Esto muestra cómo funciona un mecanismo de agregación. Con esta sala, dinero ficticio
     y unos minutos, no sirve como prueba de la sabiduría de las multitudes.</p>

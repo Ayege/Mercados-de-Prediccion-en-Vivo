@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+DEFAULT_MEDIA = str(Path(__file__).parent / "medios.json")
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,8 @@ class Settings:
     api_docs: bool = True
     vigil_account: str = ""  # cuenta de servicio de Cloud Scheduler, para verificar su OIDC
     vigil_audience: str = ""
+    media_file: str = DEFAULT_MEDIA  # la lista de medios y su inclinación, definida por el ponente
+    agent_budget: float = 200.0  # créditos que arriesga cada agente de noticias por pregunta
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -72,6 +77,8 @@ class Settings:
             api_docs=env.get("API_DOCS", "0" if env.get("K_SERVICE") else "1") == "1",
             vigil_account=env.get("VIGILIA_CUENTA", ""),
             vigil_audience=env.get("VIGILIA_AUDIENCIA", ""),
+            media_file=env.get("MEDIOS_ARCHIVO", DEFAULT_MEDIA),
+            agent_budget=float(env.get("AGENTES_PRESUPUESTO", "200")),
         )
 
     def check(self) -> None:

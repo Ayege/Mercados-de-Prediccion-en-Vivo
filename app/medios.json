@@ -1,0 +1,11 @@
+{
+  "_instrucciones": [
+    "Esta lista la defines tú. El código no clasifica medios y el modelo tampoco.",
+    "Pon al menos un medio de izquierda y uno de derecha. 'inclinacion' es 'izquierda' o 'derecha'.",
+    "'fuente' es de dónde sale esa clasificación (un estudio, un índice, tu criterio declarado): la proyección la muestra.",
+    "Mientras esté vacía, en producción la búsqueda de noticias se niega a correr; en ensayo se usan dos medios ficticios.",
+    "Ejemplo de entrada: {\"nombre\": \"Medio A\", \"dominio\": \"medio-a.com\", \"inclinacion\": \"izquierda\", \"fuente\": \"…\"}"
+  ],
+  "fuente": "",
+  "medios": []
+}

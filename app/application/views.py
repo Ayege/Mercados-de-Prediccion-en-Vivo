@@ -9,6 +9,7 @@ from ..domain.cloud.simulation import FAULTS as SIM_FAULTS
 from ..domain.cloud.simulation import PREDICATES, Simulation
 from ..domain.framing import Headline
 from ..domain.market import Account, Attempt, Market
+from ..domain.media import AgentRead, Article, NewsDraft
 
 
 def attempt_view(a: Attempt) -> dict:
@@ -39,6 +40,28 @@ def framing_view(m: Market) -> dict | None:
     return out
 
 
+def article_view(a: Article) -> dict:
+    return {"headline": a.headline, "url": a.url, "outlet": a.outlet.name, "lean": a.outlet.lean,
+            "source": a.outlet.source}
+
+
+def draft_view(d: NewsDraft) -> dict:
+    return {"id": d.id, "topic": d.topic, "question": d.question, "criteria": d.criteria, "kind": d.kind,
+            "accepted": d.accepted, "articles": [article_view(a) for a in d.articles], "trace": list(d.trace),
+            "model": d.model, "market_id": d.market_id}
+
+
+def agent_read_view(r: AgentRead, outcome: str | None) -> dict:
+    """Lo que leyó, lo que creyó, lo que apostó y, si ya se resolvió, lo que ganó o perdió."""
+    pnl = None
+    if outcome in ("YES", "NO"):
+        pnl = round((r.shares if r.outcome == outcome else 0.0) - r.stake, 2)
+    return {"agent": r.agent, "diet": r.diet, "read": [article_view(a) for a in r.read],
+            "p": None if r.p is None else round(r.p, 3), "reasoning": r.reasoning,
+            "price_before": round(r.price_before, 3), "outcome": r.outcome, "stake": r.stake,
+            "shares": round(r.shares, 2), "pnl": pnl}
+
+
 def market_view(m: Market) -> dict:
     last = m.last_attempt
     oracle = None
@@ -64,6 +87,9 @@ def market_view(m: Market) -> dict:
         "attempts": [attempt_view(a) for a in m.attempts],
         "max_loss": round(m.max_loss, 2),
         "framing": framing_view(m),
+        "topic": m.topic or None,
+        "coverage": [article_view(a) for a in m.coverage],
+        "agents": [agent_read_view(r, m.outcome) for r in m.agent_reads],
     }
 
 

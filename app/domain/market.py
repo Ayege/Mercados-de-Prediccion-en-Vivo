@@ -12,7 +12,8 @@ Cada mercado declara qué tipo de pregunta es, porque eso cambia qué mide el pr
   el comportamiento es emergente. Lo resuelve el propio código de la simulación.
 
 Una pregunta `presente` o `futuro` puede llevar además un encuadre: dos titulares
-sobre el mismo hecho, y cada persona ve solo uno (ver `framing.py`).
+sobre el mismo hecho, y cada persona ve solo uno (ver `framing.py`). O puede nacer
+de las noticias del día, con su cobertura y los agentes que la leyeron (ver `media.py`).
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from . import lmsr
 from .cloud.predicates import PREDICATES, REAL
 from .errors import MarketError
 from .framing import Exposure, Framing, Headline
+from .media import AgentRead, Article
 from .verdict import OUTCOMES, Verdict
 
 KINDS = ("presente", "futuro", "sala", "simulacion")
@@ -58,13 +60,16 @@ class Market:
     framing: Framing | None = None
     exposure: Exposure = field(default_factory=Exposure)
     revealed: bool = False  # los titulares se muestran en la proyección al revelar o al resolver
+    topic: str = ""  # el tema de las noticias del que nació, si nació de ellas
+    coverage: list[Article] = field(default_factory=list)
+    agent_reads: list[AgentRead] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise MarketError("tipo de pregunta inválido")
         if (self.kind == "simulacion") != (self.predicate in PREDICATES):
             raise MarketError("las preguntas de simulación necesitan un predicado conocido, y solo ellas")
-        if self.framing and self.kind not in ("presente", "futuro"):
+        if (self.framing or self.coverage) and self.kind not in ("presente", "futuro"):
             raise MarketError("solo las preguntas que resuelve el oráculo pueden llevar titulares")
 
     @property

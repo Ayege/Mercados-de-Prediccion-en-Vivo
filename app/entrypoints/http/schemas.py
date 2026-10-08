@@ -54,3 +54,7 @@ class InjectFault(BaseModel):
 class RealFault(BaseModel):
     region: str = Field(min_length=3, max_length=40, pattern=r"^[a-z0-9-]+$")
     kind: Literal["latencia", "caida"]
+
+
+class Topic(BaseModel):
+    topic: str = Field(min_length=3, max_length=80)

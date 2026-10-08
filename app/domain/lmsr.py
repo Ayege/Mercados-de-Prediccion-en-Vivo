@@ -33,3 +33,18 @@ def shares_for_spend(q: list[float], b: float, i: int, spend: float) -> float:
     rest = total - e[i]
     new_i = math.exp(spend / b) * total - rest
     return b * math.log(new_i) + m - q[i]
+
+
+def spend_to_reach(q: list[float], b: float, i: int, target: float) -> float:
+    """Cuánto hay que gastar en el resultado i (de dos) para que su precio llegue a `target`.
+
+    En un mercado binario, p_i = target cuando q_i − q_j = b · ln(target / (1 − target)).
+    Si el precio ya está en `target` o por encima, no hace falta gastar nada.
+    """
+    j = 1 - i
+    delta = q[j] + b * math.log(target / (1 - target)) - q[i]
+    if delta <= 0:
+        return 0.0
+    after = list(q)
+    after[i] += delta
+    return cost(after, b) - cost(q, b)

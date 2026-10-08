@@ -60,7 +60,7 @@ async function pintar() {
     <div class="fila pequeno">Monto por orden:
       ${[10, 50, 100, 250].map(n =>
         `<button data-monto="${n}" ${n === monto ? "disabled" : ""}>${n}</button>`).join("")}
-    </div>` + mercados.map(m => `
+    </div>` + ordenar(mercados).map(m => `
     <article class="tarjeta">
       <span class="chip">${esc(tipo(m).etiqueta)}</span>
       ${titular(u.headlines?.[m.id], "Titular que te tocó: la sala ve dos titulares distintos y se revelan al final")}

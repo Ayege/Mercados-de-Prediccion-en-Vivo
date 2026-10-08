@@ -9,9 +9,12 @@ La demo tiene tres partes. Se pueden dar por separado o juntas:
 
 1. **Creencia contra evidencia.** La sala agrega lo que cree; el oráculo busca
    evidencia; una política en código decide si esa evidencia alcanza.
-2. **Encuadre.** El mismo hecho, contado con dos titulares. La sala se divide
-   al azar y se mide cuánto la movió el titular. Después se le muestran los dos
-   titulares al modelo y el código exige que su veredicto no dependa de ellos.
+2. **Noticias y encuadre.** El mismo hecho, contado con dos titulares: la sala
+   se divide al azar y se mide cuánto la movió el titular. Preguntas que nacen
+   de las noticias del día, y cuatro agentes con dietas de medios distintas
+   (solo izquierda, solo derecha, ambas, ninguna) que leen la cobertura real y
+   apuestan en el mismo mercado. Y el código exige que el veredicto del modelo
+   no dependa del titular que leyó.
 3. **Nube autónoma.** Bucles que actúan sobre Cloud Run de verdad: despliegan la
    topología que propone un modelo, escalan con el tráfico de los móviles,
    reparan fallas reales y tienen un mercado real de agentes con precios del
@@ -40,7 +43,7 @@ Demo desplegada: https://oraculo-api-346171942822.us-east1.run.app (proyecto
 | Pantalla | Quién la ve | Qué muestra |
 | --- | --- | --- |
 | `/` | La audiencia, en el móvil | Las preguntas, el precio y los botones para apostar. El titular que le tocó a esa persona, si la pregunta tiene encuadre. El censo privado, si la pregunta es de la sala |
-| `/proyeccion.html` | Todos, en el proyector | Cada mercado, su precio, quién lo resuelve y la línea «la sala decía X; el juez dice Y». En preguntas con encuadre: qué apostó cada grupo y, al revelar, los dos titulares |
+| `/proyeccion.html` | Todos, en el proyector | Cada mercado, su precio, quién lo resuelve y la línea «la sala decía X; el juez dice Y». En preguntas con encuadre: qué apostó cada grupo y, al revelar, los dos titulares. En preguntas desde las noticias: la cobertura por lado y qué leyó, creyó y apostó cada agente. Para el ponente, el panel para buscar noticias y abrir la pregunta |
 | `/nube.html` | El ponente, en el proyector | La infraestructura real, el mercado real, la política de actuación, los incidentes y el laboratorio simulado (incluidas noticias y credulidad) |
 
 Los controles del ponente solo aparecen si la URL termina en `#clave=…`. Sin la
@@ -96,8 +99,9 @@ fallo, el precio de la sala en ese momento y el motivo del rechazo.
 ## Encuadre: noticias, opinión y modelos
 
 En internet hay miles de noticias sobre cualquier hecho, y la opinión se mueve
-según cómo están escritas. A los modelos les pasa lo mismo: leen esas noticias.
-Esta parte lo muestra en tres piezas, de la más real a la más simulada.
+según cómo están escritas y según qué medios lee cada quien. A los modelos les
+pasa lo mismo: leen esas noticias. Esta parte lo muestra en cuatro piezas, de la
+más real a la más simulada.
 
 ### 1. La sala, dividida al azar
 
@@ -138,7 +142,63 @@ con el titular, queda SIN RESOLVER, porque los hechos eran los mismos.
 Es el mismo patrón del resto del proyecto, *el modelo propone, el código
 dispone*, aplicado ahora a la manipulación por redacción.
 
-### 3. Credulidad en el laboratorio (simulado)
+### 3. Agentes con dieta de medios, sobre las noticias del día
+
+Las preguntas no son fijas: nacen de las noticias. En la proyección, el ponente
+escribe un tema y pulsa «Buscar noticias».
+
+1. **El editor (Gemini con grounding)** busca noticias recientes del tema en los
+   medios de tu lista, de los dos lados, y propone una pregunta de sí o no
+   verificable, con criterio y fecha.
+2. **Cada titular se verifica.** El servidor descarga la página del medio y usa
+   el título que el medio publicó (`og:title` o `<title>`). El modelo puede
+   proponer enlaces, pero nunca escribe titulares: si una página no carga, no es
+   de un medio de la lista o redirige fuera de ella, el artículo no existe.
+3. **`NewsPolicy` decide si el borrador sirve:** pregunta de sí o no, criterio,
+   tipo, y al menos un titular verificado de izquierda y uno de derecha. Si no,
+   queda rechazado con su traza y se busca otra vez.
+4. **El ponente abre la pregunta.** La sala apuesta como en cualquier otra.
+5. **«Que opinen los agentes».** Cuatro agentes Gemini leen la misma cobertura,
+   cada uno solo lo que su dieta permite: solo medios de izquierda, solo de
+   derecha, ambos o ninguno. No buscan en internet. Cada uno estima P(SÍ) y
+   compra hasta llevar el precio a su creencia, con un tope de 200 créditos,
+   uno tras otro. La proyección muestra qué leyó cada uno, qué creyó, contra qué
+   precio y cuánto apostó.
+6. **Al resolver**, la misma tarjeta dice qué dieta ganó dinero y cuál perdió.
+
+Lo que enseña: con los mismos hechos disponibles, la dieta de medios separa las
+creencias, y quien apuesta mueve el precio que ve la sala. Como los agentes
+apuestan en orden, el último fija el precio; la pantalla lo dice.
+
+Cuesta una llamada a Gemini por búsqueda y cuatro cuando opinan los agentes,
+siempre a pedido del ponente. Hay una búsqueda cada 30 s como máximo y los
+agentes opinan una sola vez por pregunta.
+
+#### Tu lista de medios
+
+La inclinación de cada medio **la defines tú** en
+[`app/medios.json`](app/medios.json) (u otro archivo con `MEDIOS_ARCHIVO`). Ni
+el código ni el modelo clasifican medios. Cada entrada lleva la fuente de su
+clasificación, y la proyección cita la lista:
+
+```json
+{
+  "fuente": "Quién definió la lista y con qué criterio",
+  "medios": [
+    {"nombre": "Medio A", "dominio": "medio-a.com", "inclinacion": "izquierda", "fuente": "…"},
+    {"nombre": "Medio B", "dominio": "medio-b.com", "inclinacion": "derecha", "fuente": "…"}
+  ]
+}
+```
+
+- Hace falta al menos un medio de cada lado. Mientras la lista esté vacía (así
+  viene), en producción la búsqueda se niega a correr y la proyección lo dice.
+- En ensayo (sin Vertex AI) se usan dos medios **ficticios**, con dominios
+  `.example` y titulares marcados `[Ensayo]`. El editor simulado nunca pone
+  palabras en la boca de un medio real, aunque tu lista tenga medios reales.
+- Cambiar la lista exige una nueva imagen (`gcloud builds submit`).
+
+### 4. Credulidad en el laboratorio (simulado)
 
 Los agentes del laboratorio tienen un gen más, `credulidad`. Cada 10 ticks llega
 una noticia alarmista («se viene un pico») que acierta el 30 % de las veces.
@@ -266,10 +326,12 @@ equivocada:
 | --- | --- |
 | «Miren, la multitud acertó» | «Así se ve un mecanismo de agregación. Ninguno sabía la respuesta y el precio se movió hacia ella» |
 | «Los medios manipulan a las masas» | «El mismo hecho, con dos titulares, y esta sala apostó distinto. Al modelo le pasó lo mismo, y el código lo detectó» |
+| «Los medios de izquierda (o de derecha) mienten» | «Cuatro agentes leyeron la misma cobertura con dietas distintas y terminaron creyendo cosas distintas. Lo que los separó fue qué leyeron, no los hechos» |
 | «Esta nube se gobierna sola» | «Estos son los bucles que una nube autónoma necesitaría, en su forma más pequeña, y aquí es donde el código le dice que no al modelo» |
 
 La proyección está construida para la columna derecha. Todos los mercados abren
-en 50 %, sin órdenes de la casa, así que cualquier movimiento lo hizo la sala.
+en 50 %, sin órdenes de la casa. Los únicos que operan además de la sala son los
+agentes de noticias, y la proyección muestra cada una de sus órdenes.
 Al resolver, dice si el precio se había movido hacia la respuesta o en contra, y
 nunca que «la multitud acertó».
 
@@ -317,7 +379,7 @@ mismo y que nadie sepa del grupo: prácticas, hábitos, incidentes recientes.
 5. **Cierre (10 min).** Qué *no* demuestra esto. Muestra
    [`app/domain/verdict.py`](app/domain/verdict.py) y sus tests.
 
-**`encuadre`: noticias, opinión y modelos**
+**`encuadre`: noticias, opinión y modelos** (necesita tu lista de medios para el paso 5)
 
 1. **Apertura (5 min).** La sala entra en `/`. No digas todavía que hay dos
    titulares; la pantalla dice que se revelan al final.
@@ -329,7 +391,11 @@ mismo y que nadie sepa del grupo: prácticas, hábitos, incidentes recientes.
    la política de encuadre las compara. Luego `noticia_como_verdad`: el pipeline
    le pasa el titular como hecho, el modelo cambia de opinión y el código se
    niega a resolver.
-5. **Cierre (10 min).** La tabla de «qué afirmar». Si combinaste con `nube`, pasa
+5. **Las noticias de hoy (10 min).** Pide un tema a la sala y escríbelo en
+   «Pregunta desde las noticias». Lee la traza: qué enlaces propuso el modelo y
+   cuáles se verificaron. Abre la pregunta, deja que la sala apueste y pulsa
+   «Que opinen los agentes». Señala cómo se separan las creencias según la dieta.
+6. **Cierre (5 min).** La tabla de «qué afirmar». Si combinaste con `nube`, pasa
    a `/nube.html` y publica un rumor alarmista.
 
 **`nube`: la nube simulada**
@@ -374,6 +440,7 @@ app/
 │   ├── market.py        Market y Account: órdenes, censo, liquidación, grupos de encuadre
 │   ├── verdict.py       Verdict, AcceptancePolicy y CensusPolicy
 │   ├── framing.py       Titulares, asignación al azar, conteo por grupo y FramingPolicy
+│   ├── media.py         Medios, dietas, NewsPolicy y cuánto apuesta cada agente
 │   ├── errors.py
 │   └── cloud/           La nube: laboratorio determinista y reglas del mercado real
 │       ├── catalog.py   Recursos, regiones y zonas de usuarios
@@ -390,6 +457,7 @@ app/
 │       └── simulation.py  El tick, las fallas, las noticias y el juez de los mercados
 ├── application/         Casos de uso y los puertos que necesitan.
 │   ├── service.py       MarketService: crear, operar, censo, revelar, resolver (con prueba de encuadre)
+│   ├── news.py          NewsService: buscar noticias, abrir la pregunta, que opinen los agentes
 │   ├── cloud.py         CloudService: correr, pausar, fallas, topologías, juez
 │   ├── infra.py         InfraController: observar, predecir, sondear, reparar, actuar
 │   ├── judges.py        Juez compuesto: simulación o infraestructura real
@@ -405,6 +473,7 @@ app/
 │   ├── infra/           Nodos y agentes: Cloud Run (Admin API v2) y nube de ensayo
 │   ├── prices.py        Precios de Cloud Run: catálogo de Cloud Billing o foto fija
 │   ├── topology/        Generadores de topologías: Vertex AI y simulado
+│   ├── news/            Editor y lectores (Vertex AI y simulados), verificación de páginas, lista de medios
 │   └── oracle/
 │       ├── gemini.py    Ruta común: run → inject_fault → interpret → política
 │       ├── vertex.py    Gemini en Vertex AI con grounding; titulares como dato no confiable
@@ -414,6 +483,7 @@ app/
 ├── node.py              El nodo real: /salud (con NODO_FALLA) y /trabajo, lo que venden los agentes
 ├── config.py            Settings: el único que lee el entorno; falla cerrado en producción
 ├── seeds.py             Juegos de preguntas (SEED_SET)
+├── medios.json          Tu lista de medios y su inclinación (viene vacía)
 └── main.py              Raíz de composición: conecta las capas
 ```
 
@@ -430,9 +500,9 @@ capas:
 
 | Carpeta | Qué prueba | Cómo |
 | --- | --- | --- |
-| `tests/domain/` | LMSR, entidades, políticas (incluida la de encuadre), la asignación al azar, cada técnica de la nube, la simulación entera y la economía del mercado real | Python puro, sin dobles, semillas fijas |
-| `tests/application/` | Casos de uso (las tres lecturas del oráculo, qué titular ve cada quien), el controlador de infraestructura y el mercado real | Oráculo, generadores y nube de ensayo falsos, reloj controlado |
-| `tests/adapters/` | Grounding, cada fallo inyectado, dónde pone Vertex el titular, la Admin API de Cloud Run y el catálogo de precios | Payloads grabados y SKUs reales en `fixtures/`, sin red |
+| `tests/domain/` | LMSR, entidades, políticas (encuadre y noticias), la asignación al azar, cuánto apuesta un agente, cada técnica de la nube y la economía del mercado real | Python puro, sin dobles, semillas fijas |
+| `tests/application/` | Casos de uso (las tres lecturas del oráculo, qué titular ve cada quien, la dieta de cada agente, qué dieta ganó), el controlador de infraestructura y el mercado real | Oráculo, editor, lectores y nube de ensayo falsos, reloj controlado |
+| `tests/adapters/` | Grounding, cada fallo inyectado, dónde pone Vertex el titular, la verificación de páginas (lista, redirecciones, títulos), la Admin API de Cloud Run y el catálogo de precios | Payloads grabados, transporte HTTP simulado y SKUs reales en `fixtures/`, sin red |
 | `tests/entrypoints/` | API de punta a punta, incluidas `/api/infra`, `revelar` y los juegos de preguntas | `TestClient` con el oráculo simulado y la nube de ensayo |
 | `tests/security/` | Cada control de [SECURITY.md](SECURITY.md) | Recorre las rutas y los archivos estáticos |
 | `tests/test_docs.py` | Que `docs/ARQUITECTURA.md` coincida con los `.mmd` y que los enlaces locales existan | Sin red |
@@ -520,6 +590,11 @@ real se lee del campo `domain`. Hay un test que lo fija; no lo borres.
 turno del usuario, marcado como dato no confiable. Nunca en la instrucción de
 sistema (eso es exactamente el fallo `noticia_como_verdad`).
 
+**Un titular lo publica el medio, no el modelo.** El texto que se muestra de un
+medio real es el título de su página, descargada por el servidor. El servidor
+solo descarga dominios de tu lista. Y la inclinación de cada medio la decide tu
+lista, no el código ni el modelo.
+
 **El experimento de encuadre no expone a nadie.** La asignación vive en el
 mercado y solo salen agregados por grupo. Los titulares no se publican hasta
 revelar o resolver.
@@ -573,7 +648,7 @@ Registry. No hace falta Docker local. Estos comandos crearon el proyecto
 | Nodos `oraculo-nodo-*` | Las instancias mínimas cobran aunque nadie las use | ¼ vCPU y 256 MiB; 2 instancias mínimas en total como máximo |
 | Agentes `oraculo-agente-*` | Las peticiones que atienden y la instancia mínima si su gen `warm` está activo | Como mucho 1 agente caliente (0,45 centavos/hora); 12 peticiones por ciclo (≈ 1 µUSD cada una) |
 | Nodos y agentes olvidados | Si la API duerme, siguen ahí | Vigilia: los borra a los 30 min sin nadie mirando |
-| Gemini | Por llamada | Solo cuando el ponente pide una topología o consulta al oráculo (tres llamadas si la pregunta tiene encuadre) |
+| Gemini | Por llamada | Solo a pedido del ponente: una topología, una consulta al oráculo (tres si la pregunta tiene encuadre), una búsqueda de noticias (una cada 30 s como máximo) o la opinión de los agentes (cuatro, una vez por pregunta) |
 | Imágenes | Almacenamiento | Se conservan las 3 más recientes |
 | Todo el proyecto | — | Presupuesto de 10 USD/mes con alertas al 50, 90 y 100 %. **Un presupuesto alerta, no corta** |
 
@@ -781,8 +856,10 @@ aceptados están en [SECURITY.md](SECURITY.md). En resumen:
 - **Pantallas:** CSP `script-src 'self'`, ningún script en línea y cabeceras de
   seguridad en todas las respuestas. Los enlaces de los titulares solo pueden
   ser `https`.
-- **El modelo:** componente no confiable; tres políticas en código deciden. Los
+- **El modelo:** componente no confiable; las políticas en código deciden. Los
   titulares le llegan como dato, nunca como instrucción.
+- **Descargas:** el servidor solo descarga páginas de los medios de tu lista,
+  por https, revalidando cada redirección, con límite de tiempo y tamaño.
 - **La nube:** `ActuationPolicy`, identidades con permisos mínimos, nodos
   privados y sin roles.
 - **Cadena de suministro:** lock con hashes, imagen base por digest y Trivy.

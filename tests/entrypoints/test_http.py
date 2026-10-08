@@ -360,3 +360,29 @@ def test_unknown_seed_set_is_rejected(monkeypatch):
     monkeypatch.setenv("SEED_SET", "encuadre+meteorito")
     with pytest.raises(ValueError, match="meteorito"):
         app_with(with_seed=True)
+
+
+# --- preguntas desde las noticias ------------------------------------------------
+
+def test_news_flow_end_to_end_with_rehearsal_outlets(client):
+    info = client.get("/api/info").json()["news"]
+    assert info["ready"] and info["rehearsal"]
+    d = client.post("/api/noticias/borradores", json={"topic": "tasa de interés"}).json()
+    assert d["accepted"] and all(a["url"].startswith("https://") for a in d["articles"])
+    mid = client.post(f"/api/noticias/borradores/{d['id']}/abrir").json()["id"]
+    m = client.post(f"/api/markets/{mid}/agentes").json()
+    assert {a["diet"] for a in m["agents"]} == {"izquierda", "derecha", "ambas", "ninguna"}
+    assert client.post(f"/api/markets/{mid}/agentes").status_code == 400
+
+
+def test_news_routes_are_presenter_only(monkeypatch):
+    monkeypatch.setenv("PRESENTER_KEY", "s3creto")
+    c = app_with()
+    assert c.get("/api/noticias").status_code == 403
+    assert c.post("/api/noticias/borradores", json={"topic": "tasa"}).status_code == 403
+    assert c.delete("/api/noticias/borradores/x").status_code == 403
+    assert c.post("/api/markets/x/agentes").status_code == 403
+
+
+def test_nobody_can_take_an_agents_name(client):
+    assert client.post("/api/entrar", json={"name": "agente:izquierda"}).status_code == 422

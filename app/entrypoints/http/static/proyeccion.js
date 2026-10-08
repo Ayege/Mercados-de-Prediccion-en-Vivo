@@ -60,6 +60,38 @@ function encuadre(m) {
     <ul class="intentos">${fila("pro_si")}${fila("pro_no")}</ul>${lectura}${titulares}</div>`;
 }
 
+// Qué leyó, creyó y apostó cada agente según su dieta de medios.
+function agentes(m) {
+  if (!m.coverage.length) return "";
+  const titulo = `<p class="pequeno"><strong>Agentes y dieta de medios</strong> · cuatro agentes leen la misma
+    cobertura, cada uno solo lo que su dieta le permite, y apuestan en este mercado.</p>`;
+  if (!m.agents.length) {
+    const boton = m.status === "open" && !(info.presenter_key_required && !clave)
+      ? `<button data-agentes="${m.id}" ${ocupado.has(m.id) ? "disabled" : ""}>
+          ${ocupado.has(m.id) ? "Leyendo…" : "Que opinen los agentes"}</button>` : "";
+    return `<div class="agentes">${titulo}<p class="pequeno tenue">Todavía no han leído nada.</p>${boton}</div>`;
+  }
+  const bloques = m.agents.map(a => {
+    const barra = a.p == null ? `<p class="pequeno tenue">No pudo leer: no apostó.</p>` : `
+      <div class="creencia" role="img" aria-label="Creyó ${pct(a.p)}; el precio estaba en ${pct(a.price_before)}">
+        <span class="sala" style="left:calc(${a.price_before * 100}% - 2px)"></span>
+        <span class="agente" style="left:calc(${a.p * 100}% - 2px)"></span></div>`;
+    const apuesta = a.outcome
+      ? `compró <strong class="${a.outcome === "YES" ? "si" : "no"}">${RESULTADO[a.outcome]}</strong> por ${a.stake.toFixed(0)}`
+      : "no apostó";
+    const pnl = a.pnl == null ? ""
+      : ` · <strong class="${a.pnl >= 0 ? "si" : "no"}">${a.pnl >= 0 ? "ganó" : "perdió"} ${Math.abs(a.pnl).toFixed(0)}</strong>`;
+    return `<div class="agente-fila">
+      <p class="pequeno" style="margin:0"><strong>${esc(DIETAS[a.diet])}</strong> · leyó ${a.read.length} titular(es) ·
+        cree <strong>${a.p == null ? "—" : pct(a.p)}</strong> SÍ (el precio estaba en ${pct(a.price_before)}) · ${apuesta}${pnl}</p>
+      ${barra}
+      <p class="pequeno tenue" style="margin:0">${esc(a.reasoning)}</p></div>`;
+  }).join("");
+  return `<div class="agentes">${titulo}${bloques}
+    <p class="pequeno tenue">En cada barra, gris es el precio que encontró el agente y azul lo que creyó. Apostaron
+    uno tras otro, comprando hasta llevar el precio a su creencia, así que el último fija el precio que ve la sala.</p></div>`;
+}
+
 // Cómo leyó el modelo la misma pregunta con cada titular.
 function lecturas(v) {
   if (!v.framing) return "";
@@ -128,17 +160,19 @@ async function pintar() {
   document.querySelectorAll("[data-fallo]").forEach(s => { fallos[s.dataset.fallo] = s.value; });
   abiertos.clear();
   document.querySelectorAll("details[data-intentos][open]").forEach(d => abiertos.add(d.dataset.intentos));
-  document.getElementById("lista").innerHTML = mercados.map(m => {
+  document.getElementById("lista").innerHTML = ordenar(mercados).map(m => {
     const p = m.prices.YES;
     const estado = m.status === "resolved"
       ? `<span class="chip">resuelto: ${RESULTADO[m.outcome]}</span>` : "";
     return `<article class="tarjeta">
-      <div class="fila" style="margin:0"><span class="chip">${esc(tipo(m).etiqueta)}</span>${estado}</div>
+      <div class="fila" style="margin:0"><span class="chip">${esc(tipo(m).etiqueta)}${m.topic ? `: ${esc(m.topic)}` : ""}</span>${estado}</div>
       <p class="pregunta">${esc(m.question)}</p>
       <p class="mide tenue">${esc(tipo(m).mide)}</p>
       <p><span class="grande precio si">${pct(p)}</span> <span class="tenue">SÍ · abrió en 50 %
         · ${m.history.length - 1} órdenes</span></p>
       ${sparkline(m.history)}
+      ${m.coverage.length ? cobertura(m.coverage) : ""}
+      ${agentes(m)}
       ${encuadre(m)}
       ${veredicto(m)}
       ${intentos(m)}
@@ -152,6 +186,22 @@ async function pintar() {
 }
 
 document.getElementById("lista").addEventListener("click", async e => {
+  const g = e.target.closest("[data-agentes]");
+  if (g) {
+    const id = g.dataset.agentes;
+    document.getElementById("error").textContent = "";
+    ocupado.add(id);
+    pintar();
+    try {
+      await api(`/api/markets/${id}/agentes`, { method: "POST", headers: cabeceras() });
+    } catch (err) {
+      document.getElementById("error").textContent = err.message;
+    } finally {
+      ocupado.delete(id);
+      pintar();
+    }
+    return;
+  }
   const r = e.target.closest("[data-revelar]");
   if (r) {
     try {
@@ -182,12 +232,82 @@ document.getElementById("lista").addEventListener("click", async e => {
   }
 });
 
+// --- panel del ponente: preguntas desde las noticias -----------------------------
+function borrador(d) {
+  const estado = d.market_id ? `<span class="chip">abierta</span>`
+    : d.accepted ? `<span class="chip si">la política la acepta</span>` : `<span class="chip no">rechazada</span>`;
+  const acciones = d.market_id ? "" : `<div class="fila">
+    ${d.accepted ? `<button data-abrir="${d.id}">Abrir pregunta</button>` : ""}
+    <button data-descartar="${d.id}">Descartar</button></div>`;
+  return `<div class="borrador">
+    <p class="pequeno tenue">Tema: ${esc(d.topic)} · ${esc(d.model)} ${estado}</p>
+    ${d.question ? `<p class="pregunta">${esc(d.question)}</p><p class="pequeno tenue">${esc(d.criteria)}</p>` : ""}
+    ${cobertura(d.articles)}
+    <details><summary class="pequeno">Traza</summary><ol class="traza">${d.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol></details>
+    ${acciones}</div>`;
+}
+
+async function pintarNoticias() {
+  const v = await api("/api/noticias", { headers: cabeceras() });
+  const medios = v.media;
+  const lados = l => medios.outlets.filter(o => o.lean === l).map(o => o.name).join(", ") || "ninguno";
+  document.getElementById("medios").innerHTML = medios.ready
+    ? `Lista de medios${medios.rehearsal ? " <strong>de ensayo (ficticios)</strong>" : ""}: izquierda: ${esc(lados("izquierda"))} ·
+       derecha: ${esc(lados("derecha"))}.${medios.source ? ` Clasificación: ${esc(medios.source)}.` : ""}
+       El modelo propone la pregunta; los titulares se verifican en la página de cada medio.`
+    : `<span class="pendiente">Falta la lista de medios.</span> Define al menos un medio de izquierda y uno de derecha
+       en <code>app/medios.json</code>, con la fuente de cada clasificación.`;
+  document.getElementById("borradores").innerHTML = v.drafts.map(borrador).join("");
+}
+
+document.getElementById("buscar-noticias").addEventListener("submit", async e => {
+  e.preventDefault();
+  const boton = e.target.querySelector("button");
+  const error = document.getElementById("error");
+  error.textContent = "";
+  boton.disabled = true;
+  boton.textContent = "Buscando…";
+  try {
+    await api("/api/noticias/borradores", {
+      method: "POST", headers: { "Content-Type": "application/json", ...cabeceras() },
+      body: JSON.stringify({ topic: document.getElementById("tema").value.trim() }),
+    });
+  } catch (err) {
+    error.textContent = err.message;
+  } finally {
+    boton.disabled = false;
+    boton.textContent = "Buscar noticias";
+    pintarNoticias().catch(() => {});
+  }
+});
+
+document.getElementById("borradores").addEventListener("click", async e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const error = document.getElementById("error");
+  error.textContent = "";
+  try {
+    if (b.dataset.abrir) {
+      await api(`/api/noticias/borradores/${b.dataset.abrir}/abrir`, { method: "POST", headers: cabeceras() });
+    } else if (b.dataset.descartar) {
+      await fetch(`/api/noticias/borradores/${b.dataset.descartar}`, { method: "DELETE", headers: cabeceras() });
+    }
+  } catch (err) {
+    error.textContent = err.message;
+  }
+  pintarNoticias().catch(() => {});
+  pintar();
+});
+
 api("/api/info").then(i => {
   info = i;
   document.getElementById("info").textContent =
     `Oráculo: ${i.oracle} (${i.model}) · infraestructura: ${i.infra} · revisión ${i.revision} · ` +
     `audiencia en ${location.origin}`;
   document.getElementById("sin-clave").hidden = !(i.presenter_key_required && !clave);
+  const ponente = !(i.presenter_key_required && !clave);
+  document.getElementById("noticias").hidden = !(ponente && i.news);
+  if (ponente && i.news) pintarNoticias().catch(err => { document.getElementById("error").textContent = err.message; });
   pintar();
   setInterval(() => pintar().catch(() => {}), 2000);
 });

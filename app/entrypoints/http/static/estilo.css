@@ -104,6 +104,14 @@ button.no { border-color: var(--no); }
 .titular { margin: .5rem 0; padding: .4rem .8rem; border-left: 3px solid var(--acento); background: var(--chip);
   border-radius: 0 8px 8px 0; font-style: italic; }
 .titular a { color: inherit; }
+.cobertura { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .6rem; }
+.cobertura ul { margin: .2rem 0; padding-left: 1.1rem; }
+.cobertura a { color: inherit; }
+.lado-izquierda, .lado-derecha { text-transform: uppercase; letter-spacing: .04em; font-size: .75rem; }
+.creencia { position: relative; height: 10px; background: var(--chip); border-radius: 999px; margin: .25rem 0; }
+.creencia > span { position: absolute; top: -3px; width: 4px; height: 16px; border-radius: 2px; }
+.creencia .agente { background: var(--acento); }
+.creencia .sala { background: var(--tenue); }
 .aviso { border-left: 3px solid var(--pendiente); padding: .3rem .8rem; }
 .error { color: var(--no); min-height: 1.5em; }
 

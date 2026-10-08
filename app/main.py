@@ -7,6 +7,9 @@ from .adapters.google_auth import verify_google_oidc
 from .adapters.infra.cloudrun import CloudRunNodeGateway
 from .adapters.infra.fake import FakeNodeGateway
 from .adapters.memory import InMemoryRepository
+from .adapters.news import media_list
+from .adapters.news.mock import REHEARSAL, MockNewsDesk, MockNewsReader
+from .adapters.news.vertex import VertexNewsDesk, VertexNewsReader
 from .adapters.oracle.mock import MockOracle
 from .adapters.oracle.vertex import VertexOracle
 from .adapters.prices import CloudBillingPrices, FixedPrices
@@ -16,6 +19,7 @@ from .adapters.vertex_client import VertexClient
 from .application.cloud import CloudService
 from .application.infra import InfraController
 from .application.judges import CompositeJudge
+from .application.news import NewsService
 from .application.ports import OracleGateway, TopologyGenerator
 from .application.real_market import RealMarket
 from .application.service import MarketService
@@ -76,6 +80,19 @@ def build_infra(settings: Settings, cloud: CloudService) -> InfraController | No
                            market=market)
 
 
+def build_news(settings: Settings, service: MarketService) -> NewsService:
+    """En ensayo, sin lista propia, se usan dos medios ficticios. En producción, solo la lista."""
+    media = media_list.load(settings.media_file)
+    if settings.uses_vertex:
+        client = VertexClient(settings.project, settings.location, settings.model)
+        desk, reader = VertexNewsDesk(client), VertexNewsReader(client)
+    else:
+        desk, reader = MockNewsDesk(), MockNewsReader()
+        media = media if media.ready else REHEARSAL
+    return NewsService(service, desk, reader, media, agent_budget=settings.agent_budget,
+                       cooldown=settings.oracle_cooldown)
+
+
 def build_service(settings: Settings, oracle: OracleGateway | None = None,
                   cloud: CloudService | None = None, infra: InfraController | None = None) -> MarketService:
     return MarketService(
@@ -105,7 +122,8 @@ def build(settings: Settings | None = None, service: MarketService | None = None
         async def scheduler_check(token: str) -> bool:
             return await verify_google_oidc(token, settings.vigil_audience, settings.vigil_account)
     return create_app(service, cloud, infra, settings.presenter_key, settings.revision,
-                      docs=settings.api_docs, scheduler_check=scheduler_check)
+                      docs=settings.api_docs, scheduler_check=scheduler_check,
+                      news=build_news(settings, service))
 
 
 app = build()

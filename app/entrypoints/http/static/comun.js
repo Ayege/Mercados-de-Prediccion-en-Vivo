@@ -17,6 +17,10 @@ const TIPOS = {
     etiqueta: "Nube simulada",
     mide: "Nadie sabe qué harán los agentes: el comportamiento es emergente. La resuelve el código de la simulación, no un modelo ni la sala.",
   },
+  noticias: {
+    etiqueta: "Desde las noticias",
+    mide: "Nació de las noticias del día. Cuatro agentes leen la cobertura según su dieta de medios y apuestan aquí; la sala apuesta con ellos. La resuelve el oráculo cuando llegue la fecha del criterio.",
+  },
   real: {
     etiqueta: "Nube real · Cloud Run",
     mide: "Se resuelve con lo que pase de verdad en Google Cloud: una falla real, un detector real y una reparación real, cronometrados.",
@@ -25,7 +29,14 @@ const TIPOS = {
 
 // El tipo que se muestra: las preguntas que resuelve la infraestructura real tienen el suyo.
 function tipo(m) {
+  if (m.topic) return TIPOS.noticias;
   return TIPOS[m.resolver === "infraestructura real" ? "real" : m.kind];
+}
+
+// Las preguntas que nacieron de las noticias van primero, la más reciente arriba.
+function ordenar(mercados) {
+  const noticias = mercados.filter(m => m.topic).reverse();
+  return [...noticias, ...mercados.filter(m => !m.topic)];
 }
 
 const RESULTADO = { YES: "SÍ", NO: "NO", UNRESOLVED: "SIN RESOLVER" };
@@ -37,6 +48,20 @@ const FALLOS = {
   red_caida: "Red caída",
   noticia_como_verdad: "Noticia tomada como verdad",
 };
+
+// Preguntas desde las noticias: la dieta de medios de cada agente.
+const DIETAS = { izquierda: "solo medios de izquierda", derecha: "solo medios de derecha",
+                 ambas: "medios de ambos lados", ninguna: "ningún medio" };
+
+function cobertura(articulos) {
+  const lado = l => articulos.filter(a => a.lean === l).map(a => `<li><a href="${esc(a.url)}" rel="noopener noreferrer"
+      target="_blank">${esc(a.headline)}</a> <span class="tenue">— ${esc(a.outlet)}</span></li>`).join("")
+    || `<li class="tenue">sin titulares</li>`;
+  return `<div class="cobertura">
+    <div><strong class="pequeno lado-izquierda">Izquierda</strong><ul class="pequeno">${lado("izquierda")}</ul></div>
+    <div><strong class="pequeno lado-derecha">Derecha</strong><ul class="pequeno">${lado("derecha")}</ul></div>
+  </div>`;
+}
 
 // Las preguntas con encuadre: dos titulares, cada persona ve uno.
 const GRUPOS = { pro_si: "titular pro-SÍ", pro_no: "titular pro-NO" };

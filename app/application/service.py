@@ -11,6 +11,7 @@ from collections.abc import Callable
 from ..domain.errors import MarketError
 from ..domain.framing import Framing, FramingPolicy
 from ..domain.market import Account, Market
+from ..domain.media import AGENTS, Article
 from ..domain.verdict import CensusPolicy
 from .errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
 from .limits import SlidingWindow
@@ -104,11 +105,12 @@ class MarketService:
     # --- escrituras -------------------------------------------------------------
     def create(self, question: str, criteria: str, b: float = 100.0, kind: str = "presente",
                threshold: float = 0.5, predicate: str | None = None,
-               framing: Framing | None = None) -> dict:
+               framing: Framing | None = None, topic: str = "",
+               coverage: list[Article] | None = None) -> dict:
         if kind == "simulacion" and self.judge is None:
             raise MarketError("no hay simulación conectada")
         m = Market(self.new_id(), question, criteria, b=b, kind=kind, threshold=threshold,
-                   predicate=predicate, framing=framing)
+                   predicate=predicate, framing=framing, topic=topic, coverage=list(coverage or []))
         with self.repo.transaction():
             self.repo.add_market(m)
             return market_view(m)
@@ -125,6 +127,29 @@ class MarketService:
             acc.debit(amount)
             acc.add_shares(m.id, outcome, shares)
             return {"market": market_view(m), "user": account_view(acc), "shares": shares}
+
+    def agent_trade(self, market_id: str, agent: str, outcome: str, amount: float) -> tuple[float, float]:
+        """Una orden de un agente de noticias. Devuelve (precio del SÍ antes, acciones).
+
+        Los agentes no tienen token: su credencial vacía nunca coincide con un hash,
+        así que nadie puede operar ni consultar como ellos desde la API.
+        """
+        if agent not in AGENTS:
+            raise MarketError(f"agente desconocido: {agent}")
+        with self.repo.transaction():
+            acc = self.repo.get_account(agent)
+            if acc is None:
+                acc = Account(agent, self.starting_balance)
+                self.repo.add_account(acc)
+            m = self._market(market_id)
+            before = m.prices()["YES"]
+            amount = min(amount, acc.balance)
+            if amount <= 0:
+                return before, 0.0
+            shares = m.buy(outcome, amount)
+            acc.debit(amount)
+            acc.add_shares(m.id, outcome, shares)
+            return before, shares
 
     def answer_census(self, market_id: str, user: str, token: str, answer: bool) -> dict:
         with self.repo.transaction():
