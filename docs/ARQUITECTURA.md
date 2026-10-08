@@ -2,8 +2,8 @@
 
 Cómo está construido Oráculo, de afuera hacia adentro: contexto, contenedores,
 componentes y despliegue (modelo C4), dos flujos clave y las fronteras de
-confianza. Para *por qué* existe la demo y qué afirmar con ella, ver el
-[README](../README.md); para las amenazas y los controles, ver
+confianza. Para *por qué* existe la demo, ver el [README](../README.md); para
+qué afirmar con ella, la [guía de la charla](CHARLA.md); para las amenazas y los controles, ver
 [SECURITY.md](../SECURITY.md).
 
 Los diagramas viven en `docs/*.mmd`, que son la fuente de verdad. Este documento

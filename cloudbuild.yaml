@@ -4,7 +4,7 @@
 #   secretos → análisis estático → dependencias → pruebas → imagen → escaneo → publicar → desplegar
 #
 # Manual:   gcloud builds submit --config cloudbuild.yaml --region us-east1
-# Trigger:  ver "CI/CD con Cloud Build" en el README.
+# Trigger:  ver "Publicar cambios" en docs/DESPLIEGUE.md.
 #
 # El despliegue cambia la imagen de la API y de los nodos. Las demás variables y el
 # secreto PRESENTER_KEY se conservan de la revisión anterior.

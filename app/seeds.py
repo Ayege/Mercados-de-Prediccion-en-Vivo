@@ -1,6 +1,6 @@
 """Juegos de preguntas. Qué charla das decide qué preguntas siembras.
 
-Ver "Qué afirmar desde el escenario" en el README. Se elige con SEED_SET; varios
+Ver docs/CHARLA.md («Elegir las preguntas» y «Qué afirmar»). Se elige con SEED_SET; varios
 juegos se combinan con «+» (por ejemplo, `encuadre+nube_real`).
 """
 from __future__ import annotations

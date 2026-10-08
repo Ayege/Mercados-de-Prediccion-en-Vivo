@@ -9,7 +9,7 @@ confianza están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 No abras un issue público. Escribe a la responsable del repositorio con los
 pasos para reproducirlo. Si el problema afecta a la demo desplegada, el
 interruptor inmediato es **Apagar todo** en `/nube.html`, o borrar los
-servicios `oraculo-nodo-*` (ver el README).
+servicios `oraculo-nodo-*` (ver [Después de la charla](docs/DESPLIEGUE.md#después-de-la-charla)).
 
 ## Qué se protege
 
