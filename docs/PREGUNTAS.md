@@ -44,6 +44,7 @@ noticias no se siembran: se crean en vivo desde la proyección.
 
 | `SEED_SET` | Preguntas |
 | --- | --- |
+| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala` y la autorreparación de un nodo real. **El único que acepta producción** |
 | `oraculo` (default) | Kubernetes, Python (`presente`) y USD/DOP (`futuro`) |
 | `agregacion` | Tres preguntas `sala` sobre la práctica de quienes participan |
 | `mixta` | Python, USD/DOP y una pregunta `sala` |
@@ -51,8 +52,12 @@ noticias no se siembran: se crean en vivo desde la proyección.
 | `nube` | Cooperación, autorreparación, topología y credulidad (simuladas) |
 | `nube_real` | Cooperación, topología y credulidad (simuladas), más la autorreparación de un nodo real. Necesita `INFRA_MODE=real` |
 
-Para cambiarlo en producción, ver
-[Cambiar las preguntas](DESPLIEGUE.md#cambiar-las-preguntas).
+**En producción todo es real.** La API no siembra ni deja crear preguntas que
+resuelva el laboratorio simulado, ni titulares sin el enlace `https` donde los
+publicó el medio. Por eso `encuadre`, `nube` y `nube_real` solo sirven en local;
+en producción, las preguntas con encuadre se crean con titulares reales (ver
+[NOTICIAS.md](NOTICIAS.md#crear-una-pregunta-con-encuadre)). Para cambiarlo en
+producción, ver [Cambiar las preguntas](DESPLIEGUE.md#cambiar-las-preguntas).
 
 ## Fallos del oráculo
 

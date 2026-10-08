@@ -84,7 +84,8 @@ class Settings:
         )
 
     def check(self) -> None:
-        """Falla cerrado: en producción, o con infraestructura real, sin clave fuerte no arranca."""
+        """Falla cerrado: en producción, o con infraestructura real, sin clave fuerte no arranca.
+        En producción, además, nada simulado: oráculo, noticias e infraestructura reales."""
         needs_key = self.production or self.infra_mode in ("plan", "real")
         if needs_key and len(self.presenter_key) < 32:
             raise RuntimeError("PRESENTER_KEY debe tener al menos 32 caracteres en producción o con "
@@ -92,6 +93,12 @@ class Settings:
         if self.production and not self.room_code.strip():
             raise RuntimeError("SALA_CODIGO no puede estar vacío en producción: sin código, cualquiera "
                                "en internet puede llenar la sala")
+        if self.production and not self.uses_vertex:
+            raise RuntimeError("En producción todo es real: hace falta GOOGLE_CLOUD_PROJECT y "
+                               "ORACLE_BACKEND=vertex (sin oráculo, editor ni lectores simulados)")
+        if self.production and self.infra_mode != "real":
+            raise RuntimeError("En producción todo es real: INFRA_MODE debe ser «real» "
+                               f"(está en «{self.infra_mode}»)")
         if self.infra_mode == "real" and self.vigil_account and not self.vigil_audience:
             raise RuntimeError("VIGILIA_CUENTA necesita VIGILIA_AUDIENCIA (la URL de la vigilia)")
 

@@ -27,7 +27,13 @@
       "Bash(gcloud config *)",
       "Bash(gcloud auth *)",
       "Bash(curl -s -X PATCH __TRACKED_VAR__/oraculo-nodo-pruebaiam?validateOnly=true -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'content-type: application/json' -d '{\"labels\":{\"oraculo-demo\":\"true\",\"prueba\":\"si\"}}')",
-      "Bash(python3 -c 'import sys,json;[print\\(b[\"role\"],b[\"members\"]\\) for b in json.load\\(sys.stdin\\).get\\(\"bindings\",[]\\)]')"
+      "Bash(python3 -c 'import sys,json;[print\\(b[\"role\"],b[\"members\"]\\) for b in json.load\\(sys.stdin\\).get\\(\"bindings\",[]\\)]')",
+      "Bash(.venv/bin/pytest -q tests/test_produccion_real.py)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -n \"gitleaks\" -A6 cloudbuild.yaml | head -12; cat .gcloudignore; ls ~/.cache/pre-commit 2>/dev/null | head -3; which gitleaks docker 2>/dev/null)",
+      "Read(//Users/ayeshayege/.cache/pre-commit/**)",
+      "Bash(G=$\\(ls -d ~/.cache/pre-commit/repo*/golang*/bin 2>/dev/null | head -1\\); ls ~/.cache/pre-commit/*/ -d | head; find ~/.cache/pre-commit -name gitleaks -type f -perm +111 2>/dev/null | head -2)",
+      "Bash(grep -c 'Bearer ya29\\\\|Bearer $T\\\\|ya29\\\\.' .claude/settings.json)"
     ],
     "additionalDirectories": [
       "/Users/ayeshayege/Documents/oraculo/app/domain"

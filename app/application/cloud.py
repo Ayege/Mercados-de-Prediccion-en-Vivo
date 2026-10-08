@@ -1,5 +1,7 @@
 """Casos de uso de la nube simulada: correr, pausar, inyectar fallas y pedir topologías.
 
+En producción el laboratorio está apagado: solo se usan las topologías.
+
 La simulación avanza de forma perezosa: cada petición calcula cuántos ticks
 tocan según el reloj y los ejecuta. No hay tareas en segundo plano, que Cloud
 Run congelaría entre peticiones, y los tests controlan el tiempo con un reloj falso.
@@ -21,8 +23,9 @@ MAX_CATCHUP = 50  # ticks por petición como máximo, para que una pausa larga n
 
 class CloudService:
     def __init__(self, sim: Simulation, generator: TopologyGenerator, tick_seconds: float = 1.0,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, lab: bool = True):
         self.sim = sim
+        self.lab = lab  # sin laboratorio solo quedan las topologías, que decide la política
         self.generator = generator
         self.tick_seconds = tick_seconds
         self.clock = clock
@@ -43,9 +46,14 @@ class CloudService:
     def view(self) -> dict:
         with self._lock:
             self._advance()
-            return simulation_view(self.sim, self.running, self.generator)
+            return simulation_view(self.sim, self.running, self.generator) | {"lab": self.lab}
+
+    def _require_lab(self) -> None:
+        if not self.lab:
+            raise SimulationError("el laboratorio simulado está apagado: aquí todo es real")
 
     def start(self) -> dict:
+        self._require_lab()
         with self._lock:
             self._advance()
             self.running = True
@@ -53,6 +61,7 @@ class CloudService:
             return self.view()
 
     def pause(self) -> dict:
+        self._require_lab()
         with self._lock:
             self._advance()
             self.running = False
@@ -61,6 +70,7 @@ class CloudService:
     def step(self, n: int = 1) -> dict:
         if not 1 <= n <= MAX_CATCHUP:
             raise SimulationError(f"pasos fuera de [1, {MAX_CATCHUP}]")
+        self._require_lab()
         with self._lock:
             self._advance()
             for _ in range(n):
@@ -68,6 +78,7 @@ class CloudService:
             return self.view()
 
     def inject(self, kind: str, target: str | None = None) -> dict:
+        self._require_lab()
         with self._lock:
             self._advance()
             self.sim.inject(kind, target)
@@ -92,6 +103,7 @@ class CloudService:
             return self.view()
 
     def judge(self, predicate: str) -> Verdict:
+        self._require_lab()
         with self._lock:
             self._advance()
             return self.sim.judge(predicate)

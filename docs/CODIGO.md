@@ -218,6 +218,12 @@ o con el token de Cloud Scheduler, incluidos los intentos fallidos, escriben una
 línea JSON con `"auditoria": true` (sin la clave) que Cloud Logging guarda como
 registro estructurado.
 
+**En producción, nada simulado.** `Settings.check` no arranca en Cloud Run sin
+Vertex AI e `INFRA_MODE=real`; `MarketService(only_real=True)` rechaza preguntas
+del laboratorio y titulares sin enlace; `CloudService(lab=False)` apaga los ticks,
+las fallas y el juez simulados, y deja solo las topologías. Los simulados existen
+para ensayar en local y para los tests.
+
 **Los umbrales se inyectan.** `config.py` lee el entorno y `main.py` construye
 las políticas. El dominio recibe números. La única excepción es
 `ORACLE_MOCK_FORCE`, que el simulado lee en cada llamada.

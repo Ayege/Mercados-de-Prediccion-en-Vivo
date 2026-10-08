@@ -4,6 +4,7 @@
 .gitignore
 .github
 .vscode
+.claude
 .venv
 venv
 .env

@@ -135,7 +135,7 @@ gcloud run deploy oraculo-api --image $IMAGE --region $REGION --service-account 
   --concurrency 250 --cpu 1 --memory 512Mi \
   --set-secrets PRESENTER_KEY=oraculo-presenter-key:latest \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,ORACLE_BACKEND=vertex,VERTEX_LOCATION=global,\
-SEED_SET=encuadre+nube_real,SIM_SEED=7,INFRA_MODE=real,NODO_IMAGEN=$IMAGE,NODO_CUENTA=$NODO"
+SEED_SET=real,INFRA_MODE=real,NODO_IMAGEN=$IMAGE,NODO_CUENTA=$NODO"
 gcloud run services add-iam-policy-binding oraculo-api --region $REGION \
   --member="serviceAccount:$BUILD" --role=roles/run.developer
 
@@ -152,6 +152,10 @@ gcloud scheduler jobs create http oraculo-vigilia --location=$REGION --schedule=
 - `--set-secrets`: la clave nunca aparece como variable legible en la consola.
 - En Cloud Run la API **se niega a arrancar** sin una clave de al menos 32
   caracteres o sin código de sala, y cierra `/api/docs`.
+- **En Cloud Run todo es real**, y la API se niega a arrancar si algo no lo es:
+  exige `ORACLE_BACKEND=vertex` con proyecto (oráculo, editor y agentes de
+  noticias con Gemini), `INFRA_MODE=real` y preguntas reales (`SEED_SET=real`). El
+  laboratorio simulado de `/nube.html` queda apagado.
 - El código de sala (`SALA_CODIGO`) se genera solo al arrancar cada revisión y
   aparece en la proyección de quien modera. Para fijarlo, pon un valor propio.
 - `INFRA_MODE=plan` es un buen primer paso: Cloud Run valida cada acción y no
@@ -162,15 +166,16 @@ gcloud scheduler jobs create http oraculo-vigilia --location=$REGION --schedule=
 Cada publicación pasa por [`cloudbuild.yaml`](../cloudbuild.yaml), una cadena de
 compuertas: secretos (gitleaks) → ruff con bandit → `pip-audit` → toda la suite →
 imagen → Trivy → publicar → desplegar. Si una falla, nada llega a producción. El
-despliegue cambia la imagen de la API y `NODO_IMAGEN`, y conserva el resto de la
-configuración.
+despliegue cambia la imagen de la API, `NODO_IMAGEN` y `SEED_SET`, y conserva el
+resto de la configuración.
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml --region $REGION --project $PROJECT_ID
 ```
 
 Pasa `--project` siempre: si gcloud tiene otro proyecto configurado por defecto,
-el build se iría a ese.
+el build se iría a ese. Cada publicación fija también `SEED_SET` (por defecto,
+`real`); para otro juego, añade `--substitutions=_SEED_SET=oraculo`.
 
 Las imágenes del pipeline van fijadas por digest y las dependencias de Python por
 hash. Para actualizarlas:
@@ -199,7 +204,7 @@ pierden los mercados abiertos** y cambia el código de sala. Los juegos están e
 [PREGUNTAS.md](PREGUNTAS.md#juegos-de-preguntas).
 
 ```bash
-gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=encuadre+nube_real
+gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=real
 ```
 
 ## Comprobar

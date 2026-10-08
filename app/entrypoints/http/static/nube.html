@@ -27,6 +27,7 @@
   .pista { font-size: .82rem; color: var(--tenue); border-left: 3px solid var(--pendiente); padding: .2rem .7rem; margin: .5rem 0; }
   .guia ol { margin: .4rem 0; padding-left: 1.2rem; font-size: .88rem; }
   .guia li { margin: .25rem 0; }
+  body.sin-lab .solo-lab { display: none; }
 </style>
 </head>
 <body>
@@ -41,10 +42,10 @@
   <details class="tarjeta guia" id="guia">
     <summary><strong>Cómo usar esta página</strong></summary>
     <ol>
-      <li><strong>Iniciar</strong> pone a correr la simulación: un tick por segundo, una generación cada 24 ticks.</li>
+      <li class="solo-lab"><strong>Iniciar</strong> pone a correr la simulación: un tick por segundo, una generación cada 24 ticks.</li>
       <li><strong>Pedir al modelo</strong> o <strong>Búsqueda evolutiva</strong> proponen una topología. La política la
         acepta o la rechaza con sus razones; si la acepta y es mejor que la actual, se adopta.</li>
-      <li><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios del laboratorio. Mira cuánto tarda el
+      <li class="solo-lab"><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios del laboratorio. Mira cuánto tarda el
         detector. <strong>Rumor alarmista</strong> publica una noticia falsa: mira en «Noticias y credulidad» qué hacen
         los agentes que la creen.</li>
       <li id="guia-real" hidden><strong>Activar actuación</strong> despliega la topología adoptada como servicios reales
@@ -62,13 +63,13 @@
   </details>
 
   <section class="controles tarjeta" id="controles" hidden>
-    <div class="grupo"><strong class="pequeno">Reloj de la simulación</strong>
+    <div class="grupo solo-lab"><strong class="pequeno">Reloj de la simulación</strong>
       <button data-accion="iniciar" title="Un tick por segundo">Iniciar</button>
       <button data-accion="pausar">Pausar</button>
       <button data-accion="avanzar" data-n="1">+1 tick</button>
       <button data-accion="avanzar" data-n="24" title="Cierra una generación: selección y mutación">+1 generación</button>
     </div>
-    <div class="grupo"><strong class="pequeno">Fallas simuladas</strong>
+    <div class="grupo solo-lab"><strong class="pequeno">Fallas simuladas</strong>
       <button data-falla="caida_nodo" title="Un nodo ficticio deja de responder">Caída de nodo</button>
       <button data-falla="latencia" title="Un nodo ficticio se vuelve lento 10 ticks">Latencia</button>
       <button data-falla="pico_demanda" title="La demanda simulada se multiplica por 2,5 durante 6 ticks">Pico de demanda</button>
@@ -81,7 +82,7 @@
   </section>
   <p class="error" id="error" role="alert"></p>
 
-  <div class="cifras" id="cifras"></div>
+  <div class="cifras solo-lab" id="cifras"></div>
 
   <article class="tarjeta" id="infra" hidden style="margin-bottom:1rem">
     <h2>Infraestructura real</h2>
@@ -118,21 +119,21 @@
   </article>
 
   <div class="rejilla-tarjetas">
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Predecir la demanda <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Holt-Winters aditivo con ciclo de 24 ticks, comparado con el pronóstico ingenuo
         («igual que hace un ciclo»). Si no le gana a eso, no sirve.</p>
       <div id="g-demanda"></div>
     </article>
 
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Fijar precios <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Subasta de precio uniforme por recurso. Cada agente ajusta su margen con Q-learning tabular
         según la escasez prevista. El subastador es central: este mercado <em>no</em> es descentralizado.</p>
       <div id="g-precios"></div>
     </article>
 
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Evolucionar <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Cada 24 ticks, selección por torneo, cruce y mutación reemplazan al 75 % peor. La línea de
         texto compara con lo que predice la dinámica del replicador.</p>
@@ -141,7 +142,7 @@
       <details><summary class="pequeno">Tabla por generación</summary><div class="tabla" id="t-generaciones"></div></details>
     </article>
 
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Formar coaliciones <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Contratos que ningún agente cubre solo y que exigen dos regiones. Los dispuestos se
         coaligan y reparten la ganancia por valor de Shapley exacto.</p>
@@ -149,14 +150,14 @@
       <ul class="lista" id="coaliciones"></ul>
     </article>
 
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Detectar y reparar <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Detector EWMA con z-score sobre la latencia de cada nodo y el error de predicción. No sabe qué
         falla inyectaste. Remedia drenando y reemplazando el nodo; el reemplazo tarda 3–7 ticks y a veces sale defectuoso.</p>
       <ul class="lista" id="incidentes"></ul>
     </article>
 
-    <article class="tarjeta">
+    <article class="tarjeta solo-lab">
       <h2>Noticias y credulidad <span class="chip">laboratorio simulado</span></h2>
       <p class="que">Cada 10 ticks llega una noticia alarmista: «se viene un pico». Acierta el 30 % de las veces.
         El gen «credulidad» decide cuánto infla cada agente su previsión al leerla: enciende capacidad y sube precios
@@ -174,7 +175,7 @@
     </article>
   </div>
 
-  <article class="tarjeta" style="margin-top:1rem">
+  <article class="tarjeta solo-lab" style="margin-top:1rem">
     <h2>Agentes</h2>
     <p class="que">Genoma heredado (margen, reserva, cooperación, previsión, credulidad) más el ajuste que aprendió en vida.
       Los hijos heredan el genoma, no lo aprendido.</p>

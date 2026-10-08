@@ -48,7 +48,7 @@ def build_generator(settings: Settings) -> TopologyGenerator:
 
 def build_cloud(settings: Settings) -> CloudService:
     sim = Simulation(seed=settings.sim_seed, n_agents=settings.sim_agents)
-    return CloudService(sim, build_generator(settings), settings.tick_seconds)
+    return CloudService(sim, build_generator(settings), settings.tick_seconds, lab=not settings.production)
 
 
 def build_infra(settings: Settings, cloud: CloudService) -> InfraController | None:
@@ -105,6 +105,7 @@ def build_service(settings: Settings, oracle: OracleGateway | None = None,
         starting_balance=settings.starting_balance,
         oracle_cooldown=settings.oracle_cooldown,
         room_code=new_room_code() if settings.room_code.strip().lower() == "auto" else settings.room_code,
+        only_real=settings.production,
     )
 
 

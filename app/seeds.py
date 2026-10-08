@@ -100,6 +100,9 @@ SEEDS = {
     "nube": [COOPERACION, AUTORREPARACION, TOPOLOGIA, CREDULIDAD],
     # La nube autónoma actuando sobre Cloud Run de verdad (INFRA_MODE=real).
     "nube_real": [COOPERACION, TOPOLOGIA, AUTORREPARACION_REAL, CREDULIDAD],
+    # Solo lo real: el oráculo con evidencia, el censo de la sala y un nodo real de Cloud Run.
+    # Es el único juego que acepta producción.
+    "real": [KUBERNETES, PYTHON, DOLAR, VIERNES, AUTORREPARACION_REAL],
     # Encuadre: dos titulares, la sala dividida al azar, y el oráculo puesto a prueba con ambos.
     # La pregunta de la sala no lleva titular: es el grupo de control del mecanismo.
     "encuadre": [PYTHON_ENCUADRADO, KUBERNETES_ENCUADRADO, VIERNES],

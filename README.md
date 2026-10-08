@@ -16,7 +16,7 @@ dónde y por qué el código le dice que no.
 | --- | --- | --- |
 | **Creencia contra evidencia** | La sala apuesta sobre preguntas que nadie sabe con certeza. Gemini busca evidencia en la web y una política en código acepta o rechaza su veredicto. Los rechazos se pueden provocar a propósito para verlos | [Tipos de pregunta](docs/PREGUNTAS.md) |
 | **Noticias y opinión** | La sala se divide al azar y cada mitad lee un titular distinto sobre el mismo hecho. Las preguntas también pueden nacer de las noticias del día, con cuatro agentes que solo leen medios de izquierda, solo de derecha, ambos o ninguno, y apuestan en el mismo mercado | [Noticias, encuadre y opinión](docs/NOTICIAS.md) |
-| **Nube autónoma** | Bucles que actúan sobre Cloud Run de verdad: despliegan la topología que propone un modelo, escalan con el tráfico de los móviles, reparan fallas reales y tienen un mercado de agentes con precios reales. Un laboratorio simulado muestra lo mismo a cámara rápida | [La nube autónoma](docs/NUBE.md) |
+| **Nube autónoma** | Bucles que actúan sobre Cloud Run de verdad: despliegan la topología que propone un modelo, escalan con el tráfico de los móviles, reparan fallas reales y tienen un mercado de agentes con precios reales. En local, un laboratorio simulado muestra lo mismo a cámara rápida | [La nube autónoma](docs/NUBE.md) |
 
 Hay tres pantallas:
 
@@ -31,7 +31,9 @@ Los controles de moderación aparecen solo si la URL termina en `#clave=…`.
 ## Probarlo en cinco minutos
 
 Requiere Python 3.12 o superior. Sin credenciales de Google Cloud, todo corre en
-modo de ensayo: oráculo simulado, medios ficticios y nada que cobre.
+modo de ensayo: oráculo simulado, medios ficticios y nada que cobre. **En
+producción no hay nada simulado:** la API no arranca si el oráculo, las noticias,
+la infraestructura o las preguntas no son reales.
 
 ```bash
 python -m venv .venv

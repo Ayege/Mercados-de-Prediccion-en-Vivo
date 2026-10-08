@@ -19,11 +19,14 @@ que todavía es honesta, y la interfaz dice cuál es.
 | Mercado de recursos | Subasta de precio uniforme de la demanda real entre 4 agentes, con tope de 12 peticiones por ciclo | Subasta por recurso entre doce agentes | **No es descentralizado**: hay un subastador central, y el dinero es contable |
 | Reaccionar a noticias | — | Gen `credulidad` y noticias alarmistas (ver [NOTICIAS.md](NOTICIAS.md#4-credulidad-en-el-laboratorio-simulado)) | Un parámetro, no un modelo de opinión |
 
-**Por qué existe el laboratorio:**
+**En producción el laboratorio está apagado.** Ahí no hay nada simulado:
+`/nube.html` muestra solo la infraestructura real, el mercado real y las
+topologías (las propone Gemini o el algoritmo genético y las decide la política).
+El laboratorio existe para ensayar en local, y por eso:
 
 - **Va a cámara rápida.** Una generación real dura unos 2 minutos (12 ciclos de
   10 s); una simulada, 24 s.
-- **Se controla.** Sus fallas y su demanda las decide el ponente.
+- **Se controla.** Sus fallas y su demanda las decide quien modera.
 - **Se puede ensayar.** Es determinista dada la semilla (`SIM_SEED`).
 
 ## La sala no decide la topología

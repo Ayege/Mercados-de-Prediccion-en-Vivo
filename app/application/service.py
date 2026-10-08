@@ -9,6 +9,7 @@ import time
 import uuid
 from collections.abc import Callable
 
+from ..domain.cloud.predicates import SIMULATED
 from ..domain.errors import MarketError
 from ..domain.framing import Framing, FramingExperiment, FramingPolicy
 from ..domain.market import Account, Market
@@ -38,8 +39,10 @@ class MarketService:
         entries: SlidingWindow | None = None,
         orders: SlidingWindow | None = None,
         room_code: str = "",
+        only_real: bool = False,
     ):
         self.repo = repo
+        self.only_real = only_real
         self.new_id = new_id
         self.starting_balance = starting_balance
         self.accounts = Accounts(repo, starting_balance, max_accounts, entries, orders, room_code)
@@ -93,6 +96,11 @@ class MarketService:
                coverage: list[Article] | None = None) -> dict:
         if kind == "simulacion" and self.judge is None:
             raise MarketError("no hay simulación conectada")
+        if self.only_real and predicate in SIMULATED:
+            raise MarketError("aquí todo es real: esa pregunta la resolvería el laboratorio simulado")
+        if self.only_real and framing and not (framing.pro_si.url and framing.pro_no.url):
+            raise MarketError("aquí todo es real: cada titular necesita el enlace https donde lo "
+                              "publicó el medio")
         m = Market(self.new_id(), question, criteria, b=b, kind=kind, threshold=threshold,
                    predicate=predicate,
                    framing=FramingExperiment(framing) if framing else None,

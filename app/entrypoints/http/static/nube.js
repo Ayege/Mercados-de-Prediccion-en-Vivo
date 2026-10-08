@@ -233,7 +233,9 @@ async function pintarInfra(puedeControlar) {
   document.getElementById("honesto").textContent = real
     ? "Real sobre Cloud Run, con límites duros: la topología adoptada, el autoescalado, la reparación y el mercado " +
       "real (agentes con servicios propios, precios del catálogo de Cloud Billing, coaliciones que se ejecutan y " +
-      "evolución con ganancia medida). La simulación de doce agentes de abajo sigue siendo un laboratorio."
+      "evolución con ganancia medida)." +
+      (document.body.classList.contains("sin-lab") ? " Aquí no hay nada simulado: el laboratorio está apagado."
+        : " La simulación de doce agentes de abajo sigue siendo un laboratorio.")
     : `Infraestructura en modo ${v.mode}: ${v.mode === "plan" ? "Cloud Run valida cada acción sin aplicarla" :
        "nube de ensayo en memoria, con precios reales de una foto del catálogo"}. Nada cobra.`;
   texto("infra-que", `Modo ${v.mode} (${v.gateway}) · actuación ${v.active ? "ACTIVA" : "en pausa"} · ` +
@@ -380,15 +382,17 @@ let puedeControlar = false;
 async function pintar() {
   pintarInfra(puedeControlar).catch(() => {});
   const v = await api("/api/nube");
-  texto("estado", `${v.running ? "Corriendo" : "En pausa"} · semilla ${v.seed} · generador de topologías: ` +
-    `${v.generator.name} (${v.generator.model})`);
+  document.body.classList.toggle("sin-lab", !v.lab);
+  texto("estado", (v.lab ? `${v.running ? "Corriendo" : "En pausa"} · semilla ${v.seed} · ` : "") +
+    `generador de topologías: ${v.generator.name} (${v.generator.model})`);
+  topologia(v);
+  if (!v.lab) return;
   cifras(v);
   graficos(v);
   agentes(v);
   coaliciones(v);
   incidentes(v);
   noticias(v);
-  topologia(v);
 }
 
 document.getElementById("controles").addEventListener("click", async e => {

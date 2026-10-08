@@ -145,7 +145,8 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
                 "presenter_key_required": bool(presenter_key),
                 "room_code_required": bool(service.room_code),
                 "news": news.media.summary() if news else None,
-                "infra": infra.mode if infra else "apagado"}
+                "infra": infra.mode if infra else "apagado",
+                "lab": cloud.lab if cloud else False}
 
     # --- audiencia ---------------------------------------------------------------
     @app.post("/api/entrar", status_code=201)
