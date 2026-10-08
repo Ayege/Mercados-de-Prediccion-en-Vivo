@@ -82,3 +82,40 @@ def test_accepted_better_proposal_is_adopted():
     sim = Simulation()
     record = sim.review("generativo", "m", {"replicas": {"us-east1": 2, "us-central1": 2}}, [])
     assert record.adopted and sim.topology == {"us-east1": 2, "us-central1": 2}
+
+
+def test_rumor_is_a_false_alarm_that_credulous_agents_believe():
+    sim = run(Simulation(seed=5), 3)
+    sim.inject("rumor")
+    news = sim.news[-1]
+    assert news.rumor and not news.true and sim.surge == (-1, -1)
+    assert sim.news_tone(sim.tick_n) == 1.0
+    run(sim, 5)
+    assert sim.news_tone(sim.tick_n) == 0.0
+    assert all(f.cleared is not None for f in sim.faults if f.kind == "rumor")
+
+
+def test_credulity_only_matters_while_a_news_story_is_fresh():
+    from dataclasses import replace
+
+    def world(credulidad):
+        sim = Simulation(seed=5)
+        for a in sim.agents:
+            a.genome = replace(a.genome, credulidad=credulidad)
+        return sim
+
+    calm, credulous = run(world(0.0), 9), run(world(1.0), 9)  # la primera noticia llega en el tick 10
+    assert calm.series.price == credulous.series.price
+    calm.inject("rumor")
+    credulous.inject("rumor")
+    run(calm, 3)
+    run(credulous, 3)
+    assert calm.series.price != credulous.series.price
+
+
+def test_credulity_predicate_waits_for_generation_five():
+    sim = Simulation(seed=7)
+    assert sim.judge("credulidad_g5").outcome == "UNRESOLVED"
+    run(sim, GEN_TICKS * 5)
+    v = sim.judge("credulidad_g5")
+    assert v.outcome in ("YES", "NO") and "credulidad media" in v.reasoning

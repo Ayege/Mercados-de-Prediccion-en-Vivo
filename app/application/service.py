@@ -1,6 +1,7 @@
 """Casos de uso del mercado: operar, responder el censo y resolver."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import secrets
 import time
@@ -8,12 +9,13 @@ import uuid
 from collections.abc import Callable
 
 from ..domain.errors import MarketError
+from ..domain.framing import Framing, FramingPolicy
 from ..domain.market import Account, Market
 from ..domain.verdict import CensusPolicy
 from .errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
 from .limits import SlidingWindow
-from .ports import FAULTS, OracleGateway, Repository, SimulationJudge
-from .views import account_view, market_view
+from .ports import FAULTS, FRAMING_FAULTS, OracleGateway, Repository, SimulationJudge
+from .views import account_view, headline_view, market_view
 
 
 class MarketService:
@@ -23,6 +25,7 @@ class MarketService:
         oracle: OracleGateway,
         census: CensusPolicy | None = None,
         judge: SimulationJudge | None = None,
+        framing: FramingPolicy | None = None,
         starting_balance: float = 1000.0,
         oracle_cooldown: float = 30.0,
         clock: Callable[[], float] = time.time,
@@ -35,6 +38,7 @@ class MarketService:
         self.oracle = oracle
         self.census = census or CensusPolicy()
         self.judge = judge
+        self.framing = framing or FramingPolicy()
         self.starting_balance = starting_balance
         self.cooldown = oracle_cooldown
         self.clock = clock
@@ -75,8 +79,12 @@ class MarketService:
             return market_view(self._market(market_id))
 
     def account(self, name: str, token: str) -> dict:
+        """La cuenta y, por cada pregunta con titulares, el único titular que esta persona ve."""
         with self.repo.transaction():
-            return account_view(self._authenticate(name, token))
+            acc = self._authenticate(name, token)
+            headlines = {m.id: headline_view(m.headline_for(acc.name))
+                         for m in self.repo.markets() if m.framing and m.status == "open"}
+            return account_view(acc) | {"headlines": headlines}
 
     def enter(self, name: str) -> dict:
         """Reserva un nombre y entrega su token. El token se muestra una sola vez."""
@@ -95,11 +103,12 @@ class MarketService:
 
     # --- escrituras -------------------------------------------------------------
     def create(self, question: str, criteria: str, b: float = 100.0, kind: str = "presente",
-               threshold: float = 0.5, predicate: str | None = None) -> dict:
+               threshold: float = 0.5, predicate: str | None = None,
+               framing: Framing | None = None) -> dict:
         if kind == "simulacion" and self.judge is None:
             raise MarketError("no hay simulación conectada")
         m = Market(self.new_id(), question, criteria, b=b, kind=kind, threshold=threshold,
-                   predicate=predicate)
+                   predicate=predicate, framing=framing)
         with self.repo.transaction():
             self.repo.add_market(m)
             return market_view(m)
@@ -112,7 +121,7 @@ class MarketService:
             m.ensure_open()
             if amount > acc.balance:
                 raise MarketError("saldo insuficiente")
-            shares = m.buy(outcome, amount)
+            shares = m.buy(outcome, amount, acc.name)
             acc.debit(amount)
             acc.add_shares(m.id, outcome, shares)
             return {"market": market_view(m), "user": account_view(acc), "shares": shares}
@@ -125,12 +134,40 @@ class MarketService:
             m.answer_census(acc.name, answer)
             return {"census_count": len(m.census)}
 
+    def reveal(self, market_id: str) -> dict:
+        """Muestra los dos titulares en la proyección. La sala sigue pudiendo operar."""
+        with self.repo.transaction():
+            m = self._market(market_id)
+            if m.framing is None:
+                raise MarketError("esta pregunta no tiene titulares")
+            m.revealed = True
+            return market_view(m)
+
+    async def _consult(self, m: Market, fault: str | None):
+        """El oráculo, y si la pregunta tiene titulares, la prueba de encuadre.
+
+        Primero una lectura neutral. Si es decisiva, dos lecturas más, cada una con
+        un titular, y `FramingPolicy` exige que coincidan. Si la neutral no decide,
+        no se gasta en las otras dos.
+        """
+        trusted = fault in FRAMING_FAULTS
+        payload_fault = None if trusted else fault
+        neutral = await self.oracle.resolve(m.question, m.criteria, payload_fault)
+        if m.framing is None or not neutral.decisive:
+            return neutral
+        news = m.framing.news(trusted)
+        reads = await asyncio.gather(
+            *(self.oracle.resolve(m.question, m.criteria, None, n) for n in news.values()))
+        return self.framing.apply(neutral, dict(zip(news, reads, strict=True)))
+
     async def resolve(self, market_id: str, fault: str | None = None) -> dict:
-        if fault is not None and fault not in FAULTS:
+        if fault is not None and fault not in FAULTS and fault not in FRAMING_FAULTS:
             raise MarketError(f"fallo desconocido: {fault}")
         with self.repo.transaction():
             m = self._market(market_id)
             m.ensure_open()
+            if fault in FRAMING_FAULTS and m.framing is None:
+                raise MarketError("ese fallo solo aplica a preguntas con titulares")
             now = self.clock()
             wait = self.cooldown - (now - m.last_consulted_at)
             if m.kind in ("presente", "futuro") and wait > 0:
@@ -145,12 +182,13 @@ class MarketService:
             verdict = self.judge.judge(m.predicate)  # type: ignore[union-attr,arg-type]
         elif not m.resolved_by_census:
             # Fuera de la transacción: la llamada tarda y el mercado sigue operando.
-            verdict = await self.oracle.resolve(m.question, m.criteria, fault)
+            verdict = await self._consult(m, fault)
 
         with self.repo.transaction():
             if m.status != "open":  # otra resolución ganó la carrera
                 return market_view(m)
             if m.record(verdict, belief, fault, self.clock()):
+                m.revealed = True
                 for acc in self.repo.accounts():
                     acc.settle(m.id, m.outcome)
             return market_view(m)

@@ -2,6 +2,10 @@
 
 Devuelve un payload con la forma exacta de generateContent, así que pasa por
 `interpret` y la política igual que el adaptador real.
+
+Ante un titular se porta como un modelo con buenas defensas: si la noticia llega
+como dato no confiable, la ignora. Si llega como hecho verificado (el fallo
+`noticia_como_verdad`), la cree y responde hacia donde empuja.
 """
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ import hashlib
 import json
 import os
 
+from ...domain.framing import News
 from ...domain.verdict import VALID, AcceptancePolicy, Verdict
 from .gemini import run
 
@@ -20,11 +25,13 @@ class MockOracle:
     def __init__(self, policy: AcceptancePolicy | None = None):
         self.policy = policy or AcceptancePolicy()
 
-    async def _call(self, question: str, criteria: str) -> dict:
+    async def _call(self, question: str, criteria: str, news: News | None = None) -> dict:
         # Se lee en cada llamada para poder fijar el veredicto durante un ensayo.
         force = os.getenv("ORACLE_MOCK_FORCE", "").upper()
         digest = hashlib.sha256(question.encode()).digest()
         outcome = force if force in VALID else ("YES" if digest[0] % 2 == 0 else "NO")
+        if news and news.trusted and outcome != "UNRESOLVED":
+            outcome = news.lean
         chunks = [] if outcome == "UNRESOLVED" else [
             {"web": {"uri": "https://example.com/a", "title": "Fuente A", "domain": "example.com"}},
             {"web": {"uri": "https://example.org/b", "title": "Fuente B", "domain": "example.org"}},
@@ -40,6 +47,7 @@ class MockOracle:
                                   "webSearchQueries": ["simulada"] if chunks else []},
         }]}
 
-    async def resolve(self, question: str, criteria: str, fault: str | None = None) -> Verdict:
+    async def resolve(self, question: str, criteria: str, fault: str | None = None,
+                      news: News | None = None) -> Verdict:
         trace = ["oráculo simulado, sin red"]
-        return await run(self._call, question, criteria, self.model, trace, self.policy, fault)
+        return await run(self._call, question, criteria, self.model, trace, self.policy, fault, news)

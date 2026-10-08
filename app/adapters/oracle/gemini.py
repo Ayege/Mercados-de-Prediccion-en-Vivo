@@ -15,9 +15,10 @@ import json
 from collections.abc import Awaitable, Callable
 
 from ...application.ports import FAULTS
+from ...domain.framing import News
 from ...domain.verdict import AcceptancePolicy, Proposal, Source, Verdict
 
-Call = Callable[[str, str], Awaitable[dict]]
+Call = Callable[[str, str, News | None], Awaitable[dict]]
 
 
 class NetworkDown(Exception):
@@ -107,15 +108,18 @@ def interpret(payload: dict, model: str, trace: list[str], policy: AcceptancePol
 
 
 async def run(call: Call, question: str, criteria: str, model: str, trace: list[str],
-              policy: AcceptancePolicy, fault: str | None = None) -> Verdict:
+              policy: AcceptancePolicy, fault: str | None = None, news: News | None = None) -> Verdict:
     """Llamada, fallo inyectado e interpretación. Nunca lanza por un fallo del modelo."""
     if fault and fault not in FAULTS:
         raise ValueError(f"fallo desconocido: {fault}")
+    if news:
+        how = "como hecho verificado (fallo inyectado)" if news.trusted else "como dato no confiable"
+        trace.append(f"el modelo lee el titular «{news.headline.text}» {how}")
     try:
         if fault == "red_caida":
             trace.append(f"fallo inyectado: {fault} ({FAULTS[fault]})")
             raise NetworkDown("conexión rechazada")
-        payload = await call(question, criteria)
+        payload = await call(question, criteria, news)
     except Exception as exc:
         trace.append(f"error al llamar al modelo ({type(exc).__name__}) → UNRESOLVED (fail-closed)")
         return policy.unreachable(model, trace)

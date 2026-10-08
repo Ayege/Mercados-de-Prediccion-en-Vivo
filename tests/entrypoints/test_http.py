@@ -301,3 +301,62 @@ def test_info_and_markets_say_who_resolves(monkeypatch):
     resolvers = {m["predicate"]: m["resolver"] for m in c.get("/api/markets").json()}
     assert resolvers["autorreparacion_real"] == "infraestructura real"
     assert resolvers["cooperacion_g5"] == "simulación"
+
+
+# --- encuadre -------------------------------------------------------------------
+
+FRAMED = {"question": "¿Llueve mañana en SDQ?", "criteria": "SÍ si llueve.",
+          "framing": {"pro_si": {"text": "Alerta: se acercan lluvias fuertes", "source": "titular de ensayo"},
+                      "pro_no": {"text": "Se espera un fin de semana seco", "source": "titular de ensayo"}}}
+
+
+def test_framed_market_hides_headlines_from_the_projection_until_revealed(client):
+    mid = client.post("/api/markets", json=FRAMED).json()["id"]
+    h = client.get("/api/users/aye", headers={"X-User-Token": token(client, "aye")}).json()["headlines"][mid]
+    assert h["text"] in ("Alerta: se acercan lluvias fuertes", "Se espera un fin de semana seco")
+    public = client.get(f"/api/markets/{mid}").json()["framing"]
+    assert public["headlines"] is None and "aye" not in str(public)
+    assert client.post(f"/api/markets/{mid}/revelar").json()["framing"]["headlines"]["pro_si"]
+
+
+def test_headline_link_must_be_https(client):
+    body = {**FRAMED, "framing": {**FRAMED["framing"], "pro_si": {
+        "text": "Alerta: se acercan lluvias fuertes", "source": "medio", "url": "javascript:alert(1)"}}}
+    assert client.post("/api/markets", json=body).status_code == 422
+
+
+def test_reveal_is_presenter_only(monkeypatch):
+    monkeypatch.setenv("PRESENTER_KEY", "s3creto")
+    monkeypatch.setenv("SEED_SET", "encuadre")
+    c = app_with(with_seed=True)
+    mid = next(m["id"] for m in c.get("/api/markets").json() if m["framing"])
+    assert c.post(f"/api/markets/{mid}/revelar").status_code == 403
+
+
+def test_trusted_news_fault_is_accepted_only_on_framed_markets(client, monkeypatch):
+    monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
+    plain = new_market(client)
+    assert client.post(f"/api/markets/{plain}/resolve?fault=noticia_como_verdad").status_code == 400
+    framed = client.post("/api/markets", json=FRAMED).json()["id"]
+    r = client.post(f"/api/markets/{framed}/resolve?fault=noticia_como_verdad").json()
+    assert r["status"] == "open" and r["oracle"]["outcome"] == "UNRESOLVED"
+    r = client.post(f"/api/markets/{framed}/resolve").json()
+    assert r["outcome"] == "YES" and r["oracle"]["framing"]["pro_no"]["outcome"] == "YES"
+
+
+def test_framing_seed_set_has_two_framed_questions_and_a_control(monkeypatch):
+    monkeypatch.setenv("SEED_SET", "encuadre")
+    markets = app_with(with_seed=True).get("/api/markets").json()
+    assert [bool(m["framing"]) for m in markets] == [True, True, False]
+    assert all(m["prices"]["YES"] == 0.5 for m in markets)
+
+
+def test_seed_sets_combine_with_plus(monkeypatch):
+    monkeypatch.setenv("SEED_SET", "encuadre+nube")
+    assert len(app_with(with_seed=True).get("/api/markets").json()) == 7
+
+
+def test_unknown_seed_set_is_rejected(monkeypatch):
+    monkeypatch.setenv("SEED_SET", "encuadre+meteorito")
+    with pytest.raises(ValueError, match="meteorito"):
+        app_with(with_seed=True)

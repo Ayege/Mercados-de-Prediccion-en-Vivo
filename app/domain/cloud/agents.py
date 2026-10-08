@@ -1,7 +1,8 @@
 """Agentes proveedores: un genoma que hereda la especie y un Q-learner que aprende en vida.
 
 - El genoma (evolución, entre generaciones) fija la estrategia de base: margen,
-  reserva de capacidad, disposición a cooperar y cuánto confía en la predicción.
+  reserva de capacidad, disposición a cooperar, cuánto confía en la predicción
+  y cuánto se deja llevar por las noticias (credulidad).
 - El Q-learner (refuerzo, dentro de una vida) ajusta el margen tick a tick según
   la escasez prevista y cuánto vendió.
 
@@ -20,6 +21,7 @@ GENES = {
     "reserva": (0.0, 0.5),  # capacidad extra que mantiene encendida
     "cooperacion": (0.0, 1.0),  # probabilidad de entrar en coaliciones
     "prevision": (0.0, 1.0),  # cuánto escala y cobra según la demanda prevista
+    "credulidad": (0.0, 1.0),  # cuánto mueve su previsión una noticia, sin mirar los datos
 }
 ARCHETYPES = ("cooperativo", "agresivo", "previsor", "austero")
 ACTIONS = (-0.1, 0.0, 0.1)  # cambio del ajuste de margen aprendido
@@ -31,6 +33,7 @@ class Genome:
     reserva: float
     cooperacion: float
     prevision: float
+    credulidad: float = 0.0
 
     @classmethod
     def random(cls, rng: random.Random) -> Genome:

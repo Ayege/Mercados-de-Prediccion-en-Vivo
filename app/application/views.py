@@ -7,6 +7,7 @@ from __future__ import annotations
 from ..domain.cloud.evolution import shares
 from ..domain.cloud.simulation import FAULTS as SIM_FAULTS
 from ..domain.cloud.simulation import PREDICATES, Simulation
+from ..domain.framing import Headline
 from ..domain.market import Account, Attempt, Market
 
 
@@ -20,6 +21,22 @@ def attempt_view(a: Attempt) -> dict:
         "sources": len(v.domains),
         "at": a.at,
     }
+
+
+def headline_view(h: Headline | None) -> dict | None:
+    return None if h is None else {"text": h.text, "source": h.source, "url": h.url}
+
+
+def framing_view(m: Market) -> dict | None:
+    """Agregados por grupo, siempre. Los titulares, solo al revelar o al resolver:
+    la proyección la ve toda la sala, y mostrarlos antes arruinaría el experimento."""
+    if m.framing is None:
+        return None
+    out = {"groups": m.exposure.summary(), "revealed": m.revealed, "headlines": None}
+    if m.revealed:
+        out["headlines"] = {"pro_si": headline_view(m.framing.pro_si),
+                            "pro_no": headline_view(m.framing.pro_no)}
+    return out
 
 
 def market_view(m: Market) -> dict:
@@ -46,6 +63,7 @@ def market_view(m: Market) -> dict:
         "oracle": oracle,
         "attempts": [attempt_view(a) for a in m.attempts],
         "max_loss": round(m.max_loss, 2),
+        "framing": framing_view(m),
     }
 
 
@@ -112,7 +130,8 @@ def simulation_view(sim: Simulation, running: bool, generator) -> dict:
             {"number": g.number, "tick": g.tick, "shares": g.shares,
              "fitness": {k: _r(v, 1) for k, v in g.fitness.items()},
              "predicted": {k: round(v, 3) for k, v in g.predicted.items()},
-             "best": g.best, "best_genome": g.best_genome, "best_fitness": g.best_fitness}
+             "best": g.best, "best_genome": g.best_genome, "best_fitness": g.best_fitness,
+             "credulity": g.credulity}
             for g in sim.generations
         ],
         "shares_now": shares(sim.agents),
@@ -131,6 +150,11 @@ def simulation_view(sim: Simulation, running: bool, generator) -> dict:
             for i in sim.incidents[-12:]
         ][::-1],
         "false_positives": sum(i.fault is None for i in sim.incidents),
+        "news": [{"tick": n.tick, "headline": n.headline, "true": n.true, "rumor": n.rumor,
+                  "fresh": sim.tick_n < n.until} for n in sim.news[-8:]][::-1],
+        "credulity": {"start": round(sim.initial_credulity, 3), "now": round(sim.mean_credulity(), 3),
+                      "news_hit_rate": (round(sum(n.true for n in sim.news) / len(sim.news), 2)
+                                        if sim.news else None)},
         "topology": {"replicas": sim.topology, "score": _score(current.score),
                      "compliant": current.accepted, "violations": current.trace},
         "proposals": [

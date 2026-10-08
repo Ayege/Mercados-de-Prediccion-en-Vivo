@@ -7,6 +7,7 @@ from app.adapters.memory import InMemoryRepository
 from app.application.errors import Cooldown
 from app.application.service import MarketService
 from app.domain.errors import MarketError
+from app.domain.framing import Framing, Headline
 from app.domain.verdict import Verdict
 
 
@@ -17,8 +18,8 @@ class FakeOracle:
         self.outcome = outcome
         self.calls = []
 
-    async def resolve(self, question, criteria, fault=None):
-        self.calls.append((question, fault))
+    async def resolve(self, question, criteria, fault=None, news=None):
+        self.calls.append((question, fault) if news is None else (question, fault, news))
         return Verdict(self.outcome, 1.0, "", trace=["fake"])
 
 
@@ -92,3 +93,83 @@ def test_settlement_pays_every_holder():
     assert s.account("aye", aye)["balance"] == pytest.approx(900)
     assert s.account("bob", bob)["balance"] == pytest.approx(900 + no)
     assert yes > 0
+
+
+# --- encuadre -----------------------------------------------------------------
+
+FRAMING = Framing(Headline("Todo va según el calendario", "titular de ensayo"),
+                  Headline("Advierten que la fecha puede moverse", "titular de ensayo"))
+
+
+class GullibleOracle(FakeOracle):
+    """Responde hacia donde empuja el titular que lee."""
+
+    async def resolve(self, question, criteria, fault=None, news=None):
+        self.calls.append((question, fault, news))
+        return Verdict(news.lean if news else self.outcome, 0.9, "", trace=["fake"])
+
+
+def test_framed_question_is_checked_against_both_headlines():
+    oracle = FakeOracle("YES")
+    s = service(oracle)
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    v = asyncio.run(s.resolve(mid))
+    assert v["outcome"] == "YES" and len(oracle.calls) == 3
+    assert set(v["oracle"]["framing"]) == {"neutral", "pro_si", "pro_no"}
+
+
+def test_headline_dependent_verdict_stays_unresolved():
+    s = service(GullibleOracle("YES"))
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    v = asyncio.run(s.resolve(mid))
+    assert v["status"] == "open" and v["oracle"]["outcome"] == "UNRESOLVED"
+
+
+def test_undecided_neutral_read_skips_the_framed_reads():
+    oracle = FakeOracle("UNRESOLVED")
+    s = service(oracle)
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    asyncio.run(s.resolve(mid))
+    assert len(oracle.calls) == 1
+
+
+def test_trusted_news_fault_reaches_the_oracle_as_trusted_news():
+    oracle = GullibleOracle("YES")
+    s = service(oracle)
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    asyncio.run(s.resolve(mid, "noticia_como_verdad"))
+    neutral, *framed = oracle.calls
+    assert neutral[1] is None and neutral[2] is None
+    assert all(c[2].trusted for c in framed)
+
+
+def test_trusted_news_fault_needs_headlines():
+    oracle = FakeOracle()
+    s = service(oracle)
+    mid = s.create("¿Pregunta?", "Criterio")["id"]
+    with pytest.raises(MarketError):
+        asyncio.run(s.resolve(mid, "noticia_como_verdad"))
+    assert oracle.calls == []
+
+
+def test_each_person_sees_one_headline_and_the_room_sees_none_until_revealed():
+    s = service()
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    seen = {s.account(n, s.enter(n)["token"])["headlines"][mid]["text"] for n in ("aye", "bob")}
+    assert seen == {FRAMING.pro_si.text, FRAMING.pro_no.text}
+    assert s.view(mid)["framing"]["headlines"] is None
+    assert s.view(mid)["framing"]["groups"]["pro_si"]["exposed"] == 1
+    assert s.reveal(mid)["framing"]["headlines"]["pro_no"]["text"] == FRAMING.pro_no.text
+
+
+def test_resolution_reveals_the_headlines():
+    s = service(FakeOracle("NO"))
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    assert asyncio.run(s.resolve(mid))["framing"]["revealed"] is True
+
+
+def test_reveal_needs_headlines():
+    s = service()
+    mid = s.create("¿Pregunta?", "Criterio")["id"]
+    with pytest.raises(MarketError):
+        s.reveal(mid)

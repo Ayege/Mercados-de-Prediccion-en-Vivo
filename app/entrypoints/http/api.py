@@ -24,13 +24,20 @@ from fastapi.staticfiles import StaticFiles
 from ...application.cloud import CloudService
 from ...application.errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
 from ...application.infra import InfraController
-from ...application.ports import FAULTS
+from ...application.ports import FAULTS, FRAMING_FAULTS
 from ...application.service import MarketService
 from ...domain.errors import MarketError, SimulationError
-from .schemas import CensusAnswer, Enter, InjectFault, NewMarket, RealFault, Trade
+from ...domain.framing import Framing, Headline
+from .schemas import CensusAnswer, Enter, FramingIn, InjectFault, NewMarket, RealFault, Trade
 
 STATIC = Path(__file__).parent / "static"
-Fault = Literal[tuple(FAULTS)]  # type: ignore[valid-type]
+Fault = Literal[tuple(FAULTS | FRAMING_FAULTS)]  # type: ignore[valid-type]
+
+
+def to_framing(body: FramingIn | None) -> Framing | None:
+    if body is None:
+        return None
+    return Framing(Headline(**body.pro_si.model_dump()), Headline(**body.pro_no.model_dump()))
 
 # Scripts solo desde el propio origen: ningún script en línea, ningún dominio externo.
 # Los estilos en línea se permiten porque los gráficos SVG los usan; inyectar estilo es mucho
@@ -103,7 +110,8 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
     def info():
         o = service.oracle
         return {"oracle": o.name, "model": o.model, "revision": revision,
-                "faults": FAULTS, "presenter_key_required": bool(presenter_key),
+                "faults": FAULTS, "framing_faults": FRAMING_FAULTS,
+                "presenter_key_required": bool(presenter_key),
                 "infra": infra.mode if infra else "apagado"}
 
     # --- audiencia ---------------------------------------------------------------
@@ -135,7 +143,11 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
     @app.post("/api/markets", status_code=201, dependencies=[Depends(presenter_only)])
     def create_market(body: NewMarket):
         return service.create(body.question.strip(), body.criteria.strip(), body.b,
-                              body.kind, body.threshold, body.predicate)
+                              body.kind, body.threshold, body.predicate, to_framing(body.framing))
+
+    @app.post("/api/markets/{market_id}/revelar", dependencies=[Depends(presenter_only)])
+    def reveal(market_id: str):
+        return service.reveal(market_id)
 
     @app.post("/api/markets/{market_id}/resolve", dependencies=[Depends(presenter_only)])
     async def resolve(market_id: str, fault: Fault | None = None):

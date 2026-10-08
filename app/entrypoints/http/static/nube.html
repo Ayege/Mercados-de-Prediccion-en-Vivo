@@ -45,7 +45,8 @@
       <li><strong>Pedir al modelo</strong> o <strong>Búsqueda evolutiva</strong> proponen una topología. La política la
         acepta o la rechaza con sus razones; si la acepta y es mejor que la actual, se adopta.</li>
       <li><strong>Fallas simuladas</strong> afectan solo a los nodos ficticios del laboratorio. Mira cuánto tarda el
-        detector.</li>
+        detector. <strong>Rumor alarmista</strong> publica una noticia falsa: mira en «Noticias y credulidad» qué hacen
+        los agentes que la creen.</li>
       <li id="guia-real" hidden><strong>Activar actuación</strong> despliega la topología adoptada como servicios reales
         de Cloud Run. La sala genera la demanda abriendo la página de audiencia. Cuando un nodo tenga 5 sondeos,
         inyecta una falla real y cronometra la reparación.</li>
@@ -71,6 +72,7 @@
       <button data-falla="caida_nodo" title="Un nodo ficticio deja de responder">Caída de nodo</button>
       <button data-falla="latencia" title="Un nodo ficticio se vuelve lento 10 ticks">Latencia</button>
       <button data-falla="pico_demanda" title="La demanda simulada se multiplica por 2,5 durante 6 ticks">Pico de demanda</button>
+      <button data-falla="rumor" title="Una noticia alarmista falsa: los agentes crédulos se preparan para un pico que no llega">Rumor alarmista</button>
     </div>
     <div class="grupo"><strong class="pequeno">Topologías</strong>
       <button data-topologia="generativo" title="Gemini propone; la política decide">Pedir al modelo</button>
@@ -155,6 +157,15 @@
     </article>
 
     <article class="tarjeta">
+      <h2>Noticias y credulidad <span class="chip">laboratorio simulado</span></h2>
+      <p class="que">Cada 10 ticks llega una noticia alarmista: «se viene un pico». Acierta el 30 % de las veces.
+        El gen «credulidad» decide cuánto infla cada agente su previsión al leerla: enciende capacidad y sube precios
+        antes de ver los datos. La evolución decide si creer paga. No es un modelo de opinión pública: es un parámetro.</p>
+      <p class="pequeno" id="credulidad-resumen"></p>
+      <ul class="lista" id="noticias"></ul>
+    </article>
+
+    <article class="tarjeta">
       <h2>Generar arquitecturas</h2>
       <p class="que">El modelo generativo y un algoritmo genético proponen topologías. Ninguno decide:
         la política en código revisa presupuesto, regiones, disponibilidad y latencia.</p>
@@ -165,7 +176,7 @@
 
   <article class="tarjeta" style="margin-top:1rem">
     <h2>Agentes</h2>
-    <p class="que">Genoma heredado (margen, reserva, cooperación, previsión) más el ajuste que aprendió en vida.
+    <p class="que">Genoma heredado (margen, reserva, cooperación, previsión, credulidad) más el ajuste que aprendió en vida.
       Los hijos heredan el genoma, no lo aprendido.</p>
     <div class="tabla" id="agentes"></div>
   </article>

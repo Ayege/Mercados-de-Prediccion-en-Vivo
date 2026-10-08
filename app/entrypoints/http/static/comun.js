@@ -35,7 +35,19 @@ const FALLOS = {
   un_dominio: "Un solo dominio",
   json_malformado: "JSON malformado",
   red_caida: "Red caída",
+  noticia_como_verdad: "Noticia tomada como verdad",
 };
+
+// Las preguntas con encuadre: dos titulares, cada persona ve uno.
+const GRUPOS = { pro_si: "titular pro-SÍ", pro_no: "titular pro-NO" };
+
+function titular(h, etiqueta = "") {
+  if (!h) return "";
+  const fuente = h.url
+    ? `<a href="${esc(h.url)}" rel="noopener noreferrer" target="_blank">${esc(h.source)}</a>` : esc(h.source);
+  return `<blockquote class="titular">${etiqueta ? `<span class="pequeno tenue">${esc(etiqueta)}</span><br>` : ""}
+    «${esc(h.text)}» <span class="pequeno tenue">— ${fuente}</span></blockquote>`;
+}
 
 function esc(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, c => ({

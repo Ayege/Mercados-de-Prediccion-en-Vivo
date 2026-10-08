@@ -3,7 +3,8 @@ const clave = new URLSearchParams(location.hash.slice(1)).get("clave") || "";
 const ARQ = ["cooperativo", "agresivo", "previsor", "austero"];
 const COLOR = i => `var(--serie-${i + 1})`;
 const RECURSOS = { cpu: "cpu", almacenamiento: "almacenamiento", ancho_banda: "ancho de banda" };
-const FALLA = { caida_nodo: "caída de nodo", latencia: "latencia", pico_demanda: "pico de demanda" };
+const FALLA = { caida_nodo: "caída de nodo", latencia: "latencia", pico_demanda: "pico de demanda",
+                rumor: "rumor alarmista" };
 
 function texto(id, valor) { document.getElementById(id).textContent = valor; }
 
@@ -91,11 +92,12 @@ function arquetipo(a) {
 
 function agentes(v) {
   tabla(document.getElementById("agentes"),
-    ["agente", "región", "estrategia", "margen", "cooperación", "previsión", "ganancia", "nodo"],
+    ["agente", "región", "estrategia", "margen", "cooperación", "previsión", "credulidad", "ganancia", "nodo"],
     v.agents.map(a => [
       `${a.id} · g${a.born}`, a.region, arquetipo(a.archetype),
       `${a.markup.toFixed(2)} (${a.offset >= 0 ? "+" : ""}${a.offset.toFixed(1)})`,
-      a.genome.cooperacion.toFixed(2), a.genome.prevision.toFixed(2), a.fitness.toFixed(1),
+      a.genome.cooperacion.toFixed(2), a.genome.prevision.toFixed(2), a.genome.credulidad.toFixed(2),
+      a.fitness.toFixed(1),
       `${a.node.status} · ${a.node.latency.toFixed(0)} ms`,
     ]));
 }
@@ -143,6 +145,24 @@ function incidentes(v) {
   }
   for (const f of v.faults.filter(f => f.cleared == null)) {
     li(l, [span(`falla #${f.id} activa: ${FALLA[f.kind]}${f.target ? ` en ${f.target}` : ""} desde el tick ${f.tick}`, "no")]);
+  }
+}
+
+function noticias(v) {
+  const c = v.credulity;
+  const ult = v.generations[v.generations.length - 1];
+  texto("credulidad-resumen", `Credulidad media: ${c.start.toFixed(2)} al empezar, ${c.now.toFixed(2)} ahora` +
+    (c.news_hit_rate == null ? "." : ` · las noticias acertaron el ${Math.round(c.news_hit_rate * 100)} % de las veces.`) +
+    (ult ? ` Al cerrar la generación ${ult.number}: ${ult.credulity.toFixed(2)}.` : ""));
+  const l = document.getElementById("noticias");
+  l.replaceChildren();
+  if (!v.news.length) li(l, [span("Todavía no llegó ninguna noticia.", "tenue")]);
+  for (const n of v.news) {
+    li(l, [
+      span(`tick ${n.tick}: ${n.headline}${n.rumor ? " (rumor del ponente)" : ""} · `),
+      n.true ? span("acertó: el pico llegó", "si") : span("falsa: el pico nunca llegó", "no"),
+      ...(n.fresh ? [span(" · los crédulos la están creyendo ahora", "pendiente")] : []),
+    ]);
   }
 }
 
@@ -367,6 +387,7 @@ async function pintar() {
   agentes(v);
   coaliciones(v);
   incidentes(v);
+  noticias(v);
   topologia(v);
 }
 

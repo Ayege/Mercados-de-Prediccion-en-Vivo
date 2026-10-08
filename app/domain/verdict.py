@@ -27,6 +27,7 @@ class Verdict:
     model: str = ""
     trace: list[str] = field(default_factory=list)
     search_suggestions: str = ""
+    framing: dict[str, dict] | None = None  # lectura → veredicto, si se probó contra titulares
 
     @property
     def decisive(self) -> bool:

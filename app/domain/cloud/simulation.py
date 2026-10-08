@@ -5,6 +5,9 @@
    según Holt-Winters).
 3. Una subasta de precio uniforme por recurso liquida oferta contra demanda.
 4. Cada pocos ticks llega un contrato grande que solo una coalición puede cubrir.
+   Cada tanto llega también una noticia alarmista («se viene un pico»). A veces
+   acierta y el pico llega; casi siempre no. Los agentes crédulos inflan su
+   previsión al leerla: encienden capacidad y suben precios antes de tiempo.
 5. Los nodos reportan latencia; el detector busca anomalías y la remediación drena
    y reemplaza nodos, o enciende el autoescalado de emergencia.
 6. Al cerrar una generación, selección y mutación reemplazan a los peores.
@@ -34,6 +37,7 @@ FAULTS = {
     "caida_nodo": "un nodo deja de responder",
     "latencia": "un nodo se vuelve lento durante 10 ticks",
     "pico_demanda": "la demanda se multiplica por 2.5 durante 6 ticks",
+    "rumor": "una noticia alarmista falsa: anuncia un pico que nunca llega",
 }
 
 GEN_TICKS = 24
@@ -45,6 +49,11 @@ SHOCK_TICKS = 6
 SHOCK_FACTOR = 2.5
 RESERVATION = 2.4  # lo máximo que pagan los compradores, en múltiplos del costo base
 HISTORY = 120
+NEWS_EVERY = 10  # ticks entre noticias alarmistas
+NEWS_TICKS = 4  # cuánto dura el efecto de una noticia en quien la cree
+NEWS_TRUE = 0.3  # probabilidad de que la noticia acierte
+NEWS_PULL = 0.8  # cuánto infla la previsión un agente con credulidad 1
+SURGE_FACTOR = 1.8  # el pico que anuncia una noticia cuando acierta
 
 
 @dataclass
@@ -64,6 +73,15 @@ class Fault:
     target: str | None
     tick: int
     cleared: int | None = None
+
+
+@dataclass
+class NewsEvent:
+    tick: int
+    headline: str
+    true: bool  # si el pico anunciado llegó de verdad
+    until: int
+    rumor: bool = False  # la inyectó el ponente
 
 
 @dataclass
@@ -88,6 +106,7 @@ class GenerationStats:
     best: str
     best_genome: dict[str, float]
     best_fitness: float
+    credulity: float = 0.0  # credulidad media al cerrar la generación
 
 
 @dataclass
@@ -159,6 +178,9 @@ class Simulation:
         self.demand_detector = Detector(min_jump=0.3, warmup=GEN_TICKS)
         self.shock_until = -1
         self.emergency_until = -1
+        self.surge = (-1, -1)  # el pico que trae una noticia acertada: [desde, hasta)
+        self.news: list[NewsEvent] = []
+        self.initial_credulity = self.mean_credulity()
         self.series = Series()
         self.errors: list[tuple[float, float, float]] = []  # (real, predicho, ingenuo estacional)
         self.faults: list[Fault] = []
@@ -184,15 +206,26 @@ class Simulation:
     def drained(self, a: Agent) -> bool:
         return self.nodes[a.id].drained_since is not None
 
+    def mean_credulity(self) -> float:
+        return sum(a.genome.credulidad for a in self.agents) / len(self.agents)
+
+    def news_tone(self, t: int) -> float:
+        """1 mientras una noticia alarmista está fresca; 0 si no hay ninguna."""
+        return 1.0 if self.news and t < self.news[-1].until else 0.0
+
     # --- el tick -----------------------------------------------------------------
     def _demand(self, r: str, t: int) -> float:
         season = 1 + 0.35 * sin(tau * t / GEN_TICKS)
         trend = 1 + 0.001 * t
         shock = SHOCK_FACTOR if t < self.shock_until else 1.0
+        if self.surge[0] <= t < self.surge[1]:
+            shock *= SURGE_FACTOR
         return max(0.0, self.base_demand[r] * season * trend * self.rng.gauss(1, 0.04) * shock)
 
     def tick(self) -> None:
         t = self.tick_n
+        if t > 0 and t % NEWS_EVERY == 0:
+            self._publish(t, self.rng.random() < NEWS_TRUE)
         live = [a for a in self.agents if not self.drained(a)]
         forecast = {r: self.forecasters[r].forecast() or self.base_demand[r] for r in RESOURCES}
         demand = {r: self._demand(r, t) for r in RESOURCES}
@@ -200,6 +233,9 @@ class Simulation:
         scarcity = {r: forecast[r] / installed[r] for r in RESOURCES}
         mean_scarcity = sum(scarcity.values()) / len(scarcity)
         emergency = t < self.emergency_until
+        tone = self.news_tone(t)
+        # Lo que cada agente cree que viene: la previsión, inflada por la noticia según su credulidad.
+        belief = {a.id: 1 + NEWS_PULL * a.genome.credulidad * tone for a in self.agents}
 
         # 2. Refuerzo: cada agente mueve su margen. Autoescalado: cuánto encender.
         for a in self.agents:
@@ -211,7 +247,8 @@ class Simulation:
             a.pending = (state, action)
         share = max(1, len(live))
         active = {
-            a.id: {r: 0.0 if self.drained(a) else a.active_capacity(r, forecast[r] / share, emergency)
+            a.id: {r: 0.0 if self.drained(a)
+                   else a.active_capacity(r, forecast[r] * belief[a.id] / share, emergency)
                    for r in RESOURCES}
             for a in self.agents
         }
@@ -222,7 +259,8 @@ class Simulation:
         price: dict[str, float | None] = {}
         unmet = 0.0
         for r in RESOURCES:
-            asks = [Ask(a.id, a.ask_price(r, scarcity[r]), active[a.id][r]) for a in self.agents]
+            asks = [Ask(a.id, a.ask_price(r, scarcity[r] * belief[a.id]), active[a.id][r])
+                    for a in self.agents]
             c = clear(asks, demand[r], RESOURCES[r] * RESERVATION)
             price[r] = c.price
             unmet += c.unmet
@@ -264,6 +302,8 @@ class Simulation:
         self.series.push(t, demand, forecast, price, unmet)
         if t >= self.shock_until:
             self._clear_faults("pico_demanda", None, t)
+        if not self.news_tone(t + 1):
+            self._clear_faults("rumor", None, t)
         if (t + 1) % GEN_TICKS == 0:
             self._end_generation(t)
         self.tick_n += 1
@@ -272,6 +312,14 @@ class Simulation:
         """Demanda real de hace `lag` ticks (para el pronóstico ingenuo estacional)."""
         d = self.series.demand[r]
         return d[-lag] if len(d) >= lag else 0.0
+
+    def _publish(self, t: int, true: bool, rumor: bool = False) -> NewsEvent:
+        """Una noticia alarmista. Si acierta, el pico llega dos ticks después."""
+        if true:
+            self.surge = (t + 2, t + 2 + NEWS_TICKS)
+        n = NewsEvent(t, "«Se viene un pico de demanda»", true, t + NEWS_TICKS, rumor)
+        self.news = (self.news + [n])[-HISTORY:]
+        return n
 
     def _contract(self, t: int, live: list[Agent]) -> None:
         avg = sum(a.capacity["cpu"] for a in self.agents) / len(self.agents)
@@ -349,7 +397,7 @@ class Simulation:
         best = max(self.agents, key=lambda a: a.fitness)
         self.generations.append(GenerationStats(
             self.generation, t, sh, fit, replicator(sh, fit),
-            best.id, best.genome.as_dict(), round(best.fitness, 1),
+            best.id, best.genome.as_dict(), round(best.fitness, 1), round(self.mean_credulity(), 3),
         ))
         next_generation(self.agents, self.rng, self.generation)
 
@@ -360,6 +408,9 @@ class Simulation:
         t = self.tick_n
         if kind == "pico_demanda":
             self.shock_until = t + SHOCK_TICKS
+            target = None
+        elif kind == "rumor":
+            self._publish(t, False, rumor=True)
             target = None
         else:
             healthy = [a.id for a in self.agents if not self.drained(a) and self.nodes[a.id].fault is None]
@@ -442,6 +493,12 @@ class Simulation:
                 return pending(f"la caída de {first.target} sigue abierta")
             took = first.cleared - first.tick
             return decided(took < 6, f"la caída de {first.target} se reparó en {took} ticks")
+        if predicate == "credulidad_g5":
+            if len(self.generations) < 5:
+                return pending(f"van {len(self.generations)} generaciones cerradas de 5")
+            now, start = self.generations[4].credulity, self.initial_credulity
+            return decided(now < start,
+                           f"credulidad media: {start:.2f} al empezar, {now:.2f} en la generación 5")
         first_llm = next((p for p in self.proposals if p.source == "generativo"), None)
         if first_llm is None:
             return pending("el modelo generativo todavía no propuso nada")

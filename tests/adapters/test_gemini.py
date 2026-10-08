@@ -4,7 +4,9 @@ import pytest
 
 from app.adapters.oracle.gemini import inject_fault, interpret, normalize_sources, parse_verdict, run
 from app.adapters.oracle.mock import MockOracle
+from app.adapters.oracle.vertex import VertexOracle
 from app.application.ports import FAULTS
+from app.domain.framing import Framing, Headline
 from app.domain.verdict import AcceptancePolicy
 
 POLICY = AcceptancePolicy()
@@ -78,7 +80,7 @@ def test_mock_oracle_fails_closed_for_every_fault(fault, monkeypatch):
 def test_network_down_never_calls_the_model():
     called = []
 
-    async def call(q, c):
+    async def call(q, c, news=None):
         called.append(q)
         return GOOD
 
@@ -89,3 +91,50 @@ def test_network_down_never_calls_the_model():
 def test_unknown_fault_is_rejected():
     with pytest.raises(ValueError):
         asyncio.run(MockOracle().resolve("¿x?", "c", "meteorito"))
+
+
+# --- titulares: cómo le llegan al modelo --------------------------------------
+
+NEWS = Framing(Headline("Todo va según el calendario", "titular de ensayo"),
+               Headline("Advierten que la fecha puede moverse", "titular de ensayo")).news()
+
+
+def test_mock_oracle_ignores_untrusted_news(monkeypatch):
+    monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
+    v = asyncio.run(MockOracle().resolve("¿x?", "c", None, NEWS["pro_no"]))
+    assert v.outcome == "YES"
+    assert any("dato no confiable" in line for line in v.trace)
+
+
+def test_mock_oracle_believes_trusted_news(monkeypatch):
+    monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
+    trusted = Framing(Headline("Todo va según el calendario", "e"),
+                      Headline("Advierten que la fecha puede moverse", "e")).news(trusted=True)
+    assert asyncio.run(MockOracle().resolve("¿x?", "c", None, trusted["pro_no"])).outcome == "NO"
+
+
+class FakeClient:
+    model, location = "m", "global"
+
+    def __init__(self):
+        self.payloads = []
+
+    async def generate(self, payload):
+        self.payloads.append(payload)
+        return GOOD
+
+
+def test_vertex_puts_untrusted_news_in_the_user_turn():
+    client = FakeClient()
+    asyncio.run(VertexOracle(client, POLICY).resolve("¿x?", "c", None, NEWS["pro_si"]))
+    p = client.payloads[0]
+    assert "<noticia" in p["contents"][0]["parts"][0]["text"]
+    assert "Todo va según" not in p["systemInstruction"]["parts"][0]["text"]
+
+
+def test_vertex_trusted_news_fault_promotes_the_headline_to_system():
+    client = FakeClient()
+    trusted = Framing(NEWS["pro_si"].headline, NEWS["pro_no"].headline).news(trusted=True)
+    asyncio.run(VertexOracle(client, POLICY).resolve("¿x?", "c", None, trusted["pro_no"]))
+    system = client.payloads[0]["systemInstruction"]["parts"][0]["text"]
+    assert "NOTICIA VERIFICADA" in system and "Advierten" in system

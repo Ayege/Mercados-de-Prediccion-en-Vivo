@@ -63,6 +63,7 @@ async function pintar() {
     </div>` + mercados.map(m => `
     <article class="tarjeta">
       <span class="chip">${esc(tipo(m).etiqueta)}</span>
+      ${titular(u.headlines?.[m.id], "Titular que te tocó: la sala ve dos titulares distintos y se revelan al final")}
       <p class="pregunta">${esc(m.question)}</p>
       <p class="pequeno tenue">${esc(m.criteria)}</p>
       ${m.kind === "simulacion" ? `<p class="pequeno tenue">${esc(tipo(m).mide)}</p>` : ""}

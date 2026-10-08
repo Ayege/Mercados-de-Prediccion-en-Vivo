@@ -8,6 +8,7 @@ from typing import Protocol
 from ..domain.cloud.infra import NodeState, Probe
 from ..domain.cloud.real_market import AgentState, PriceTable, WorkResult
 from ..domain.cloud.topology import Draft
+from ..domain.framing import News
 from ..domain.market import Account, Market
 from ..domain.verdict import Verdict
 
@@ -19,18 +20,26 @@ FAULTS = {
     "json_malformado": "el texto del modelo no es JSON",
     "red_caida": "la llamada al modelo falla",
 }
+# Fallos de encuadre: no corrompen la respuesta, cambian cómo le llega la noticia al
+# modelo. Solo aplican a preguntas con titulares; los maneja el caso de uso.
+FRAMING_FAULTS = {
+    "noticia_como_verdad": "el pipeline le pasa el titular al modelo como un hecho verificado",
+}
 
 
 class OracleGateway(Protocol):
     """Un componente no confiable que propone un veredicto con evidencia.
 
     Contrato: nunca lanza. Ante cualquier fallo devuelve un Verdict UNRESOLVED.
+    Si recibe `news`, se la muestra al modelo: como dato no confiable o, si
+    `news.trusted`, como el hecho verificado que un pipeline descuidado le pasaría.
     """
 
     name: str
     model: str
 
-    async def resolve(self, question: str, criteria: str, fault: str | None = None) -> Verdict: ...
+    async def resolve(self, question: str, criteria: str, fault: str | None = None,
+                      news: News | None = None) -> Verdict: ...
 
 
 class Repository(Protocol):

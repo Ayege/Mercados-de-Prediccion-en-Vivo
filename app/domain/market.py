@@ -10,6 +10,9 @@ Cada mercado declara qué tipo de pregunta es, porque eso cambia qué mide el pr
   Lo resuelve un censo privado de la propia sala, no el oráculo.
 - `simulacion`: qué harán los agentes de la nube simulada. Nadie lo sabe porque
   el comportamiento es emergente. Lo resuelve el propio código de la simulación.
+
+Una pregunta `presente` o `futuro` puede llevar además un encuadre: dos titulares
+sobre el mismo hecho, y cada persona ve solo uno (ver `framing.py`).
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ from dataclasses import dataclass, field
 from . import lmsr
 from .cloud.predicates import PREDICATES, REAL
 from .errors import MarketError
+from .framing import Exposure, Framing, Headline
 from .verdict import OUTCOMES, Verdict
 
 KINDS = ("presente", "futuro", "sala", "simulacion")
@@ -51,12 +55,17 @@ class Market:
     attempts: list[Attempt] = field(default_factory=list)
     census: dict[str, bool] = field(default_factory=dict)
     last_consulted_at: float = 0.0
+    framing: Framing | None = None
+    exposure: Exposure = field(default_factory=Exposure)
+    revealed: bool = False  # los titulares se muestran en la proyección al revelar o al resolver
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise MarketError("tipo de pregunta inválido")
         if (self.kind == "simulacion") != (self.predicate in PREDICATES):
             raise MarketError("las preguntas de simulación necesitan un predicado conocido, y solo ellas")
+        if self.framing and self.kind not in ("presente", "futuro"):
+            raise MarketError("solo las preguntas que resuelve el oráculo pueden llevar titulares")
 
     @property
     def resolved_by_census(self) -> bool:
@@ -88,7 +97,13 @@ class Market:
         if self.status != "open":
             raise MarketError("el mercado ya está resuelto")
 
-    def buy(self, outcome: str, spend: float) -> float:
+    def headline_for(self, who: str) -> Headline | None:
+        """El titular que le toca a esta persona; la asigna a un grupo la primera vez."""
+        if self.framing is None:
+            return None
+        return self.framing.headline(self.exposure.assign(who, self.id))
+
+    def buy(self, outcome: str, spend: float, who: str | None = None) -> float:
         """Compra acciones de `outcome` por `spend` créditos. Devuelve las acciones."""
         if outcome not in OUTCOMES:
             raise MarketError("resultado inválido")
@@ -100,6 +115,9 @@ class Market:
         self.q[i] += shares
         self.volume += spend
         self.history.append(self.prices()["YES"])
+        if self.framing and who is not None:
+            self.headline_for(who)  # quien opera sin haber visto la lista también queda en un grupo
+            self.exposure.record(who, outcome, spend)
         return shares
 
     def answer_census(self, who: str, answer: bool) -> None:
