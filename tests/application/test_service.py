@@ -18,8 +18,11 @@ class FakeOracle:
         self.outcome = outcome
         self.calls = []
 
-    async def resolve(self, question, criteria, fault=None, news=None):
-        self.calls.append((question, fault) if news is None else (question, fault, news))
+    async def resolve(self, query):
+        if query.news is None:
+            self.calls.append((query.question, query.fault))
+        else:
+            self.calls.append((query.question, query.fault, query.news))
         return Verdict(self.outcome, 1.0, "", trace=["fake"])
 
 
@@ -104,9 +107,9 @@ FRAMING = Framing(Headline("Todo va según el calendario", "titular de ensayo"),
 class GullibleOracle(FakeOracle):
     """Responde hacia donde empuja el titular que lee."""
 
-    async def resolve(self, question, criteria, fault=None, news=None):
-        self.calls.append((question, fault, news))
-        return Verdict(news.lean if news else self.outcome, 0.9, "", trace=["fake"])
+    async def resolve(self, query):
+        self.calls.append((query.question, query.fault, query.news))
+        return Verdict(query.news.lean if query.news else self.outcome, 0.9, "", trace=["fake"])
 
 
 def test_framed_question_is_checked_against_both_headlines():
@@ -158,7 +161,7 @@ def test_each_person_sees_one_headline_and_the_room_sees_none_until_revealed():
     seen = {s.account(n, s.enter(n)["token"])["headlines"][mid]["text"] for n in ("aye", "bob")}
     assert seen == {FRAMING.pro_si.text, FRAMING.pro_no.text}
     assert s.view(mid)["framing"]["headlines"] is None
-    assert s.view(mid)["framing"]["groups"]["pro_si"]["exposed"] == 1
+    assert s.view(mid)["framing"]["groups"]["pro_si"]["assigned"] == 1
     assert s.reveal(mid)["framing"]["headlines"]["pro_no"]["text"] == FRAMING.pro_no.text
 
 
@@ -173,3 +176,32 @@ def test_reveal_needs_headlines():
     mid = s.create("¿Pregunta?", "Criterio")["id"]
     with pytest.raises(MarketError):
         s.reveal(mid)
+
+
+def test_reading_the_account_never_changes_the_experiment():
+    s = service()
+    early = s.enter("aye")["token"]
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]  # «aye» recibe grupo aquí
+    s.enter("bob")  # y «bob» al entrar
+    before = s.view(mid)["framing"]["groups"]
+    assert before["pro_si"]["assigned"] + before["pro_no"]["assigned"] == 2
+    for _ in range(3):
+        s.account("aye", early)
+    assert s.view(mid)["framing"]["groups"] == before
+
+
+def test_agents_never_join_a_framing_group():
+    s = service(FakeOracle("YES"))
+    s.agent_trade(s.create("¿Otra?", "Criterio")["id"], "agente:izquierda", "YES", 10)
+    mid = s.create("¿Pregunta?", "Criterio", framing=FRAMING)["id"]
+    groups = s.view(mid)["framing"]["groups"]
+    assert groups["pro_si"]["assigned"] + groups["pro_no"]["assigned"] == 0
+
+
+def test_room_code_is_required_when_set():
+    from app.application.errors import Unauthorized
+
+    s = MarketService(InMemoryRepository(), FakeOracle(), room_code="ab3k9z")
+    with pytest.raises(Unauthorized):
+        s.enter("aye", "")
+    assert s.enter("aye", " AB3K9Z ")["name"] == "aye"

@@ -183,6 +183,33 @@ class AgentRead:
     shares: float = 0.0
 
 
+@dataclass
+class NewsCoverage:
+    """Lo que una pregunta nacida de las noticias lleva consigo.
+
+    `reading` evita que los agentes lean dos veces a la vez: el estado vive en el
+    mercado, dentro de la transacción, y no en el caso de uso.
+    """
+
+    topic: str
+    articles: list[Article]
+    reads: list[AgentRead] = field(default_factory=list)
+    reading: bool = False
+
+    def start_reading(self) -> None:
+        if self.reading:
+            raise MarketError("los agentes ya están leyendo esta pregunta")
+        if self.reads:
+            raise MarketError("los agentes ya opinaron en esta pregunta")
+        self.reading = True
+
+    def finish(self, reads: list[AgentRead]) -> None:
+        self.reads, self.reading = reads, False
+
+    def abort(self) -> None:
+        self.reading = False
+
+
 def stake_for(p: float | None, q: list[float], b: float, budget: float,
               min_edge: float = 0.05) -> tuple[str | None, float]:
     """Cuánto apuesta un agente: compra hasta que el precio llega a lo que cree, sin pasarse

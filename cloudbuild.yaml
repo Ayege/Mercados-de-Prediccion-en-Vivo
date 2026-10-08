@@ -8,6 +8,13 @@
 #
 # El despliegue cambia la imagen de la API y de los nodos. Las demás variables y el
 # secreto PRESENTER_KEY se conservan de la revisión anterior.
+#
+# Cadena de suministro:
+# - El build corre como `oraculo-build`, con permisos mínimos: escribir en el repositorio de
+#   imágenes, desplegar `oraculo-api` como `oraculo-run` y escribir logs. Nada más. Si una
+#   herramienta del pipeline estuviera comprometida, no podría tocar el resto del proyecto.
+# - Toda imagen va fijada por digest y toda dependencia de Python, por hash.
+#   Para actualizar un digest: ver «Publicar cambios» en docs/DESPLIEGUE.md.
 
 substitutions:
   _REGION: us-east1
@@ -15,34 +22,37 @@ substitutions:
   _REPO: oraculo
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
 
+serviceAccount: projects/${PROJECT_ID}/serviceAccounts/oraculo-build@${PROJECT_ID}.iam.gserviceaccount.com
+
 options:
   logging: CLOUD_LOGGING_ONLY
   dynamicSubstitutions: true
 
 steps:
   - id: secretos
-    name: zricethezav/gitleaks:v8.21.2
+    name: zricethezav/gitleaks:v8.21.2@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46
     args: ["dir", ".", "--redact", "--no-banner", "--exit-code", "1"]
 
   - id: analisis-y-dependencias
-    name: python:3.12-slim
+    # La misma base que el Dockerfile: la suite corre con el Python de producción.
+    name: python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d
     entrypoint: bash
     args:
       - -c
       - |
         set -euo pipefail
-        pip install -q --require-hashes -r requirements.lock
-        pip install -q -r requirements-dev.txt
+        pip install -q --require-hashes -r requirements-dev.lock   # incluye requirements.lock
         ruff check .                                  # incluye las reglas S (bandit)
         pip-audit --require-hashes -r requirements.lock
+        pip-audit --require-hashes -r requirements-dev.lock
         pytest -q                                     # incluye tests/security y la arquitectura
 
   - id: imagen
-    name: gcr.io/cloud-builders/docker
+    name: gcr.io/cloud-builders/docker@sha256:f772ab459889c67835bd959c2b9e9351f2c0752c4f989710ecda20c229f0733e
     args: ["build", "-t", "${_IMAGE}", "."]
 
   - id: escaneo-de-imagen
-    name: gcr.io/cloud-builders/docker
+    name: gcr.io/cloud-builders/docker@sha256:f772ab459889c67835bd959c2b9e9351f2c0752c4f989710ecda20c229f0733e
     entrypoint: bash
     args:
       - -c
@@ -50,16 +60,16 @@ steps:
         set -euo pipefail
         docker save "${_IMAGE}" -o /workspace/imagen.tar
         # Falla con vulnerabilidades ALTAS o CRÍTICAS que ya tienen arreglo publicado.
-        docker run --rm -v /workspace:/workspace aquasec/trivy:0.57.1 image \
+        docker run --rm -v /workspace:/workspace aquasec/trivy:0.57.1@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b image \
           --input /workspace/imagen.tar --severity HIGH,CRITICAL --ignore-unfixed \
           --exit-code 1 --no-progress --scanners vuln
 
   - id: publicar
-    name: gcr.io/cloud-builders/docker
+    name: gcr.io/cloud-builders/docker@sha256:f772ab459889c67835bd959c2b9e9351f2c0752c4f989710ecda20c229f0733e
     args: ["push", "${_IMAGE}"]
 
   - id: desplegar
-    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim@sha256:c70885ba9f0450ea9987b1c5dc1ab80acc768bac2fe783962dc98a64ea74c806
     entrypoint: gcloud
     args:
       - run

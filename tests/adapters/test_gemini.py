@@ -5,7 +5,7 @@ import pytest
 from app.adapters.oracle.gemini import inject_fault, interpret, normalize_sources, parse_verdict, run
 from app.adapters.oracle.mock import MockOracle
 from app.adapters.oracle.vertex import VertexOracle
-from app.application.ports import FAULTS
+from app.application.ports import FAULTS, OracleQuery
 from app.domain.framing import Framing, Headline
 from app.domain.verdict import AcceptancePolicy
 
@@ -73,24 +73,24 @@ def test_fault_injection_does_not_mutate_original():
 @pytest.mark.parametrize("fault", list(FAULTS))
 def test_mock_oracle_fails_closed_for_every_fault(fault, monkeypatch):
     monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
-    v = asyncio.run(MockOracle().resolve("¿x?", "c", fault))
+    v = asyncio.run(MockOracle().resolve(OracleQuery("¿x?", "c", fault)))
     assert v.outcome == "UNRESOLVED"
 
 
 def test_network_down_never_calls_the_model():
     called = []
 
-    async def call(q, c, news=None):
-        called.append(q)
+    async def call(query):
+        called.append(query)
         return GOOD
 
-    v = asyncio.run(run(call, "¿x?", "c", "m", [], POLICY, "red_caida"))
+    v = asyncio.run(run(call, OracleQuery("¿x?", "c", "red_caida"), "m", [], POLICY))
     assert v.outcome == "UNRESOLVED" and called == []
 
 
 def test_unknown_fault_is_rejected():
     with pytest.raises(ValueError):
-        asyncio.run(MockOracle().resolve("¿x?", "c", "meteorito"))
+        asyncio.run(MockOracle().resolve(OracleQuery("¿x?", "c", "meteorito")))
 
 
 # --- titulares: cómo le llegan al modelo --------------------------------------
@@ -101,7 +101,7 @@ NEWS = Framing(Headline("Todo va según el calendario", "titular de ensayo"),
 
 def test_mock_oracle_ignores_untrusted_news(monkeypatch):
     monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
-    v = asyncio.run(MockOracle().resolve("¿x?", "c", None, NEWS["pro_no"]))
+    v = asyncio.run(MockOracle().resolve(OracleQuery("¿x?", "c", news=NEWS["pro_no"])))
     assert v.outcome == "YES"
     assert any("dato no confiable" in line for line in v.trace)
 
@@ -110,7 +110,7 @@ def test_mock_oracle_believes_trusted_news(monkeypatch):
     monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
     trusted = Framing(Headline("Todo va según el calendario", "e"),
                       Headline("Advierten que la fecha puede moverse", "e")).news(trusted=True)
-    assert asyncio.run(MockOracle().resolve("¿x?", "c", None, trusted["pro_no"])).outcome == "NO"
+    assert asyncio.run(MockOracle().resolve(OracleQuery("¿x?", "c", news=trusted["pro_no"]))).outcome == "NO"
 
 
 class FakeClient:
@@ -126,7 +126,7 @@ class FakeClient:
 
 def test_vertex_puts_untrusted_news_in_the_user_turn():
     client = FakeClient()
-    asyncio.run(VertexOracle(client, POLICY).resolve("¿x?", "c", None, NEWS["pro_si"]))
+    asyncio.run(VertexOracle(client, POLICY).resolve(OracleQuery("¿x?", "c", news=NEWS["pro_si"])))
     p = client.payloads[0]
     assert "<noticia" in p["contents"][0]["parts"][0]["text"]
     assert "Todo va según" not in p["systemInstruction"]["parts"][0]["text"]
@@ -135,6 +135,6 @@ def test_vertex_puts_untrusted_news_in_the_user_turn():
 def test_vertex_trusted_news_fault_promotes_the_headline_to_system():
     client = FakeClient()
     trusted = Framing(NEWS["pro_si"].headline, NEWS["pro_no"].headline).news(trusted=True)
-    asyncio.run(VertexOracle(client, POLICY).resolve("¿x?", "c", None, trusted["pro_no"]))
+    asyncio.run(VertexOracle(client, POLICY).resolve(OracleQuery("¿x?", "c", news=trusted["pro_no"])))
     system = client.payloads[0]["systemInstruction"]["parts"][0]["text"]
     assert "NOTICIA VERIFICADA" in system and "Advierten" in system

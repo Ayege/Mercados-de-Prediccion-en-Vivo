@@ -1,5 +1,9 @@
 """Adaptador HTTP: traduce peticiones a casos de uso y errores a códigos de estado.
 
+Todas las rutas son `async`: los casos de uso son rápidos y en memoria, y así corren en
+el mismo hilo que el event loop. Ningún hilo del pool compite por el lock del repositorio
+mientras una ruta async lo espera.
+
 Aquí viven los controles de borde, todos en un solo archivo para poder revisarlos
 de una vez (ver SECURITY.md):
 
@@ -9,10 +13,15 @@ de una vez (ver SECURITY.md):
 - Cabeceras de seguridad y CSP estricta para scripts en todas las respuestas.
 - La vista pública de la infraestructura no muestra errores internos ni deja
   que cualquiera mantenga vivos los nodos.
+- Solo cuenta como demanda real el tráfico de la audiencia autenticada.
+- Cada acción del ponente o de Cloud Scheduler deja una línea de auditoría.
 """
 from __future__ import annotations
 
+import json
+import logging
 import secrets
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Literal
@@ -57,6 +66,16 @@ STATUS = {NotFound: 404, Unauthorized: 401, Conflict: 409, Cooldown: 429, RateLi
 
 SchedulerCheck = Callable[[str], Awaitable[bool]]
 
+# Auditoría: una línea JSON por acción del ponente o de Cloud Scheduler. Cloud Run la guarda
+# como registro estructurado (severity, httpRequest) y se puede filtrar por «auditoria».
+audit = logging.getLogger("oraculo.auditoria")
+if not audit.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    audit.addHandler(_handler)
+    audit.setLevel(logging.INFO)
+    audit.propagate = False
+
 
 def create_app(service: MarketService, cloud: CloudService, infra: InfraController | None = None,
                presenter_key: str = "", revision: str = "local", docs: bool = True,
@@ -66,9 +85,20 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
 
     @app.middleware("http")
     async def harden(request: Request, call_next):
-        if infra and request.url.path.startswith("/api/") and not request.url.path.startswith("/api/infra"):
-            infra.count_request()  # cada petición de la sala es demanda real para el autoescalado
         response = await call_next(request)
+        path = request.url.path
+        # Demanda real: solo la audiencia autenticada que obtuvo respuesta. Así, inundar la API
+        # sin cuenta no infla el autoescalado ni la «demanda de la sala».
+        if infra and request.headers.get("x-user-token") and response.status_code < 400:
+            infra.count_request()
+        privileged = "x-presenter-key" in request.headers or "authorization" in request.headers
+        if privileged and request.method != "GET" and path.startswith("/api/"):
+            audit.info(json.dumps({
+                "severity": "NOTICE" if response.status_code < 400 else "WARNING",
+                "auditoria": True, "metodo": request.method, "ruta": path,
+                "consulta": str(request.url.query)[:200], "estado": response.status_code,
+                "quien": "scheduler" if "authorization" in request.headers else "ponente",
+            }, ensure_ascii=False))
         response.headers.update(SECURITY_HEADERS)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -80,7 +110,7 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
         given = request.headers.get("x-presenter-key", "")
         return not presenter_key or secrets.compare_digest(given.encode(), presenter_key.encode())
 
-    def presenter_only(request: Request) -> None:
+    async def presenter_only(request: Request) -> None:
         if not is_presenter(request):
             raise HTTPException(403, "solo el ponente puede hacer esto")
 
@@ -104,51 +134,57 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
     # Cloud Run reserva las rutas que terminan en "z": en producción, usa /api/salud.
     @app.get("/healthz")
     @app.get("/api/salud")
-    def healthz():
+    async def healthz():
         return {"ok": True}
 
     @app.get("/api/info")
-    def info():
+    async def info():
         o = service.oracle
         return {"oracle": o.name, "model": o.model, "revision": revision,
                 "faults": FAULTS, "framing_faults": FRAMING_FAULTS,
                 "presenter_key_required": bool(presenter_key),
+                "room_code_required": bool(service.room_code),
                 "news": news.media.summary() if news else None,
                 "infra": infra.mode if infra else "apagado"}
 
     # --- audiencia ---------------------------------------------------------------
     @app.post("/api/entrar", status_code=201)
-    def enter(body: Enter):
-        return service.enter(body.name)
+    async def enter(body: Enter):
+        return service.enter(body.name, body.code)
 
     @app.get("/api/markets")
-    def list_markets():
+    async def list_markets():
         return service.list()
 
     @app.get("/api/markets/{market_id}")
-    def get_market(market_id: str):
+    async def get_market(market_id: str):
         return service.view(market_id)
 
     @app.post("/api/markets/{market_id}/trade")
-    def trade(market_id: str, body: Trade, x_user_token: str = Header("", max_length=64)):
+    async def trade(market_id: str, body: Trade, x_user_token: str = Header("", max_length=64)):
         return service.trade(market_id, body.user, x_user_token, body.outcome, body.amount)
 
     @app.post("/api/markets/{market_id}/census")
-    def census(market_id: str, body: CensusAnswer, x_user_token: str = Header("", max_length=64)):
+    async def census(market_id: str, body: CensusAnswer, x_user_token: str = Header("", max_length=64)):
         return service.answer_census(market_id, body.user, x_user_token, body.answer)
 
     @app.get("/api/users/{name}")
-    def user(name: str, x_user_token: str = Header("", max_length=64)):
+    async def user(name: str, x_user_token: str = Header("", max_length=64)):
         return service.account(name, x_user_token)
 
     # --- ponente: mercados ---------------------------------------------------------
+    @app.get("/api/sala", dependencies=[Depends(presenter_only)])
+    async def room():
+        """El código de sala, para mostrarlo en la proyección. Nunca en la vista pública."""
+        return {"code": service.room_code}
+
     @app.post("/api/markets", status_code=201, dependencies=[Depends(presenter_only)])
-    def create_market(body: NewMarket):
+    async def create_market(body: NewMarket):
         return service.create(body.question.strip(), body.criteria.strip(), body.b,
                               body.kind, body.threshold, body.predicate, to_framing(body.framing))
 
     @app.post("/api/markets/{market_id}/revelar", dependencies=[Depends(presenter_only)])
-    def reveal(market_id: str):
+    async def reveal(market_id: str):
         return service.reveal(market_id)
 
     @app.post("/api/markets/{market_id}/resolve", dependencies=[Depends(presenter_only)])
@@ -162,7 +198,7 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
         return news
 
     @app.get("/api/noticias", dependencies=[Depends(presenter_only)])
-    def news_view():
+    async def news_view():
         return need_news().view()
 
     @app.post("/api/noticias/borradores", status_code=201, dependencies=[Depends(presenter_only)])
@@ -171,12 +207,12 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
 
     @app.post("/api/noticias/borradores/{draft_id}/abrir", status_code=201,
               dependencies=[Depends(presenter_only)])
-    def news_open(draft_id: str):
+    async def news_open(draft_id: str):
         return need_news().open(draft_id)
 
     @app.delete("/api/noticias/borradores/{draft_id}", status_code=204,
                 dependencies=[Depends(presenter_only)])
-    def news_discard(draft_id: str):
+    async def news_discard(draft_id: str):
         need_news().discard(draft_id)
 
     @app.post("/api/markets/{market_id}/agentes", dependencies=[Depends(presenter_only)])
@@ -185,23 +221,23 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
 
     # --- nube simulada -----------------------------------------------------------
     @app.get("/api/nube")
-    def cloud_view():
+    async def cloud_view():
         return cloud.view()
 
     @app.post("/api/nube/iniciar", dependencies=[Depends(presenter_only)])
-    def cloud_start():
+    async def cloud_start():
         return cloud.start()
 
     @app.post("/api/nube/pausar", dependencies=[Depends(presenter_only)])
-    def cloud_pause():
+    async def cloud_pause():
         return cloud.pause()
 
     @app.post("/api/nube/avanzar", dependencies=[Depends(presenter_only)])
-    def cloud_step(n: int = 1):
+    async def cloud_step(n: int = 1):
         return cloud.step(n)
 
     @app.post("/api/nube/fallas", dependencies=[Depends(presenter_only)])
-    def cloud_inject(body: InjectFault):
+    async def cloud_inject(body: InjectFault):
         return cloud.inject(body.kind, body.target)
 
     @app.post("/api/nube/topologias", dependencies=[Depends(presenter_only)])
@@ -232,7 +268,7 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
         return await need_infra().vigil()
 
     @app.post("/api/infra/actuar", dependencies=[Depends(presenter_only)])
-    def infra_toggle(activo: bool):
+    async def infra_toggle(activo: bool):
         need_infra().set_active(activo)
         return need_infra().view()
 

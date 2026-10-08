@@ -23,10 +23,10 @@ imports con `ast` y falla si alguien rompe esta tabla.
 app/
 ├── domain/              Reglas puras. No importa nada del proyecto ni de I/O.
 │   ├── lmsr.py          Market maker automático (LMSR de Hanson)
-│   ├── market.py        Market y Account: órdenes, censo, liquidación, grupos de encuadre
+│   ├── market.py        Market y Account: órdenes, censo, liquidación, historial acotado
 │   ├── verdict.py       Verdict, AcceptancePolicy y CensusPolicy
-│   ├── framing.py       Titulares, asignación al azar, conteo por grupo y FramingPolicy
-│   ├── media.py         Medios, dietas, NewsPolicy y cuánto apuesta cada agente
+│   ├── framing.py       FramingExperiment: titulares, asignación al azar, conteo por grupo; FramingPolicy
+│   ├── media.py         NewsCoverage: medios, dietas, estado «leyendo»; NewsPolicy y cuánto apuesta cada agente
 │   ├── errors.py
 │   └── cloud/           La nube: laboratorio determinista y reglas del mercado real
 │       ├── catalog.py   Recursos, regiones y zonas de usuarios
@@ -42,20 +42,23 @@ app/
 │       ├── predicates.py  Qué puede preguntar la sala y quién lo resuelve
 │       └── simulation.py  El tick, las fallas, las noticias y el juez de los mercados
 ├── application/         Casos de uso y los puertos que necesitan.
-│   ├── service.py       MarketService: crear, operar, censo, revelar, resolver (con prueba de encuadre)
+│   ├── service.py       MarketService: crear, operar, censo, revelar; compone las dos de abajo
+│   ├── accounts.py      Accounts: entrar con código de sala, token, límites de ritmo
+│   ├── resolution.py    Resolver: censo, simulación u oráculo (con prueba de encuadre)
 │   ├── news.py          NewsService: buscar noticias, abrir la pregunta, que opinen los agentes
 │   ├── cloud.py         CloudService: correr, pausar, fallas, topologías, juez
 │   ├── infra.py         InfraController: observar, predecir, sondear, reparar, actuar
 │   ├── judges.py        Juez compuesto: simulación o infraestructura real
 │   ├── real_market.py   RealMarket: subasta la demanda real, envía trabajo, liquida, evoluciona
 │   ├── limits.py        Límites de ritmo contra abuso
-│   ├── ports.py         OracleGateway, Repository, NewsDesk, NewsReader, NodeGateway, …
+│   ├── ports.py         OracleGateway (con OracleQuery), Repository, NewsDesk, NewsReader, …
 │   ├── views.py         Lo que sale de un caso de uso (dicts planos)
 │   └── errors.py        NotFound, Cooldown, …
 ├── adapters/            Implementaciones de los puertos.
 │   ├── memory.py        Repository en memoria, con lock
 │   ├── google_auth.py   Credenciales por defecto y tokens de identidad
 │   ├── vertex_client.py generateContent, compartido
+│   ├── prompt.py        Escapa el texto de terceros antes de meterlo en un prompt
 │   ├── infra/           Nodos y agentes: Cloud Run (Admin API v2) y nube de ensayo
 │   ├── prices.py        Precios de Cloud Run: catálogo de Cloud Billing o foto fija
 │   ├── topology/        Generadores de topologías: Vertex AI y simulado
@@ -64,7 +67,7 @@ app/
 │       ├── gemini.py    Ruta común: run → inject_fault → interpret → política
 │       ├── vertex.py    Gemini en Vertex AI con grounding; titulares como dato no confiable
 │       └── mock.py      Simulado, con la misma forma de respuesta
-├── entrypoints/http/    FastAPI: rutas, esquemas, clave de ponente y estáticos
+├── entrypoints/http/    FastAPI: rutas async, esquemas, clave de moderación, auditoría y estáticos
 │   └── static/          Tres pantallas con su JS aparte (CSP sin scripts en línea)
 ├── node.py              El nodo real: /salud (con NODO_FALLA) y /trabajo, lo que venden los agentes
 ├── config.py            Settings: el único que lee el entorno; falla cerrado en producción
@@ -88,7 +91,8 @@ siguen las mismas capas:
 | `tests/test_docs.py` | Que [ARQUITECTURA.md](ARQUITECTURA.md) coincida con los `.mmd` y que los enlaces locales de la documentación existan | Sin red |
 
 Otros comandos del [Makefile](../Makefile): `make lint`, `make seguridad` (los
-mismos controles que el pipeline) y `make diagramas` (tras editar un `.mmd`).
+mismos controles que el pipeline), `make lock` (tras cambiar dependencias) y
+`make diagramas` (tras editar un `.mmd`).
 
 ## Ensayar sin tocar la nube
 
@@ -100,6 +104,8 @@ mismos controles que el pipeline) y `make diagramas` (tras editar un `.mmd`).
 - **Laboratorio rápido.** `SIM_TICK_SECONDS=0.1` cierra una generación en 2,4 s.
 - **Encuadre.** Con `SEED_SET=encuadre`, abre dos pestañas privadas con nombres
   distintos: cada una ve un titular.
+- **Código de sala.** Aparece en la proyección. Con `SALA_CODIGO=` (vacío) en
+  `.env` se entra sin código, solo en local: en producción la API no arranca así.
 - **Infraestructura de ensayo.** La nube en memoria se comporta como Cloud Run:
   los cambios tardan un par de ciclos y las fallas se ven en los sondeos.
 
@@ -171,6 +177,20 @@ revelar o resolver.
 
 ### El mercado
 
+**Las funciones opcionales de una pregunta son objetos propios.** Un `Market`
+puede llevar un `FramingExperiment` (titulares, grupos, revelado) o una
+`NewsCoverage` (tema, artículos, lecturas de los agentes, estado «leyendo»), en
+vez de seis campos sueltos con validaciones cruzadas.
+
+**Leer no cambia nada.** El grupo de encuadre se asigna al entrar o al crear la
+pregunta, nunca al consultar la cuenta. El estado «los agentes están leyendo»
+vive en el mercado y se marca dentro de la transacción: dos pedidos a la vez no
+leen dos veces.
+
+**El historial de precios está acotado.** Al pasar de 400 puntos se queda con uno
+de cada dos, conservando la apertura y el último precio. El número de órdenes se
+cuenta aparte.
+
 **El censo no pasa por el oráculo.** Las preguntas `sala` se resuelven con
 `CensusPolicy` (mínimo de respuestas). Solo se publica el conteo.
 
@@ -181,6 +201,22 @@ contaminaba la única afirmación honesta: «el precio se movió».
 la audiencia no puede usar «:» en su nombre.
 
 ### La operación
+
+**Entrar exige el código de sala.** Lo genera la API al arrancar y solo lo ve
+quien modera, en la proyección. Así nadie de fuera puede llenar la sala ni
+agotar el límite de entradas.
+
+**Rutas async, casos de uso síncronos.** Las rutas son `async` y llaman a casos
+de uso rápidos y en memoria en el mismo hilo que el event loop. Ningún hilo del
+pool compite por el lock del repositorio mientras una ruta async lo espera.
+
+**Solo la audiencia autenticada es demanda.** El middleware cuenta como demanda
+real una petición con token de usuario que obtuvo respuesta, no cualquier tráfico.
+
+**Cada acción de moderación deja rastro.** Las escrituras con clave de moderación
+o con el token de Cloud Scheduler, incluidos los intentos fallidos, escriben una
+línea JSON con `"auditoria": true` (sin la clave) que Cloud Logging guarda como
+registro estructurado.
 
 **Los umbrales se inyectan.** `config.py` lee el entorno y `main.py` construye
 las políticas. El dominio recibe números. La única excepción es

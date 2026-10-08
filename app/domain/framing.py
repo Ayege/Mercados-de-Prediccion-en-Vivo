@@ -91,16 +91,41 @@ class Exposure:
         self.traders[arm].add(who)
 
     def summary(self) -> dict:
-        """Por grupo: cuántos lo vieron, cuántos apostaron y qué parte del dinero fue al SÍ."""
+        """Por grupo: a cuántos les tocó, cuántos apostaron y qué parte del dinero fue al SÍ."""
         out = {}
         for a in ARMS:
             total = self.spend[a]["YES"] + self.spend[a]["NO"]
             out[a] = {
-                "exposed": sum(1 for x in self.arms.values() if x == a),
+                "assigned": sum(1 for x in self.arms.values() if x == a),
                 "traders": len(self.traders[a]),
                 "yes_share": round(self.spend[a]["YES"] / total, 3) if total else None,
             }
         return out
+
+
+@dataclass
+class FramingExperiment:
+    """Lo que una pregunta con encuadre lleva consigo: los titulares, los grupos y si ya
+    se revelaron. La asignación ocurre al entrar o al crear la pregunta, nunca al leer."""
+
+    framing: Framing
+    exposure: Exposure = field(default_factory=Exposure)
+    revealed: bool = False  # la proyección muestra los titulares al revelar o al resolver
+
+    def assign(self, who: str, market_id: str) -> str:
+        return self.exposure.assign(who, market_id)
+
+    def headline_for(self, who: str) -> Headline | None:
+        """Solo lectura: el titular de quien ya tiene grupo."""
+        arm = self.exposure.arms.get(who)
+        return None if arm is None else self.framing.headline(arm)
+
+    def record(self, who: str, outcome: str, spend: float, market_id: str) -> None:
+        self.assign(who, market_id)  # quien entró antes de que existiera la pregunta ya tiene grupo
+        self.exposure.record(who, outcome, spend)
+
+    def news(self, trusted: bool = False) -> dict[str, News]:
+        return self.framing.news(trusted)
 
 
 @dataclass(frozen=True)

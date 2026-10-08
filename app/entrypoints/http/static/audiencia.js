@@ -13,7 +13,8 @@ document.getElementById("ingreso").addEventListener("submit", async e => {
     const r = await api("/api/entrar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: document.getElementById("nombre").value.trim() }),
+      body: JSON.stringify({ name: document.getElementById("nombre").value.trim(),
+                             code: document.getElementById("codigo").value.trim() }),
     });
     usuario = guardado("oraculo.usuario", r.name);
     token = guardado("oraculo.token", r.token);
@@ -108,6 +109,8 @@ document.getElementById("lista").addEventListener("click", async e => {
 
 api("/api/info").then(i => {
   document.getElementById("demanda").hidden = !["real", "plan", "ensayo"].includes(i.infra);
+  for (const id of ["codigo", "codigo-etiqueta"]) document.getElementById(id).hidden = !i.room_code_required;
+  document.getElementById("codigo").required = i.room_code_required;
 }).catch(() => {});
 
 function arrancar() {

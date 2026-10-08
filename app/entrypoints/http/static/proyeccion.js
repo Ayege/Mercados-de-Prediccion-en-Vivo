@@ -41,7 +41,7 @@ function encuadre(m) {
   const fila = k => {
     const x = g[k];
     const parte = x.yes_share == null ? "todavía sin apuestas" : `${pct(x.yes_share)} del dinero al SÍ`;
-    return `<li><strong>${GRUPOS[k]}</strong>: ${x.exposed} lo vieron, ${x.traders} apostaron · ${parte}</li>`;
+    return `<li><strong>${GRUPOS[k]}</strong>: les tocó a ${x.assigned}, ${x.traders} apostaron · ${parte}</li>`;
   };
   let lectura = "";
   if (g.pro_si.yes_share != null && g.pro_no.yes_share != null) {
@@ -169,7 +169,7 @@ async function pintar() {
       <p class="pregunta">${esc(m.question)}</p>
       <p class="mide tenue">${esc(tipo(m).mide)}</p>
       <p><span class="grande precio si">${pct(p)}</span> <span class="tenue">SÍ · abrió en 50 %
-        · ${m.history.length - 1} órdenes</span></p>
+        · ${m.orders} órdenes</span></p>
       ${sparkline(m.history)}
       ${m.coverage.length ? cobertura(m.coverage) : ""}
       ${agentes(m)}
@@ -306,6 +306,11 @@ api("/api/info").then(i => {
     `audiencia en ${location.origin}`;
   document.getElementById("sin-clave").hidden = !(i.presenter_key_required && !clave);
   const ponente = !(i.presenter_key_required && !clave);
+  if (ponente && i.room_code_required) {
+    api("/api/sala", { headers: cabeceras() })
+      .then(s => { const c = document.getElementById("sala"); c.hidden = false; c.querySelector("strong").textContent = s.code; })
+      .catch(() => {});
+  }
   document.getElementById("noticias").hidden = !(ponente && i.news);
   if (ponente && i.news) pintarNoticias().catch(err => { document.getElementById("error").textContent = err.message; });
   pintar();

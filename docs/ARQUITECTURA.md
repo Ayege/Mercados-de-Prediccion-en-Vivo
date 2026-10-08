@@ -2,8 +2,7 @@
 
 Cómo está construido Oráculo, de afuera hacia adentro: contexto, contenedores,
 componentes y despliegue (modelo C4), dos flujos clave y las fronteras de
-confianza. Para *por qué* existe la demo, ver el [README](../README.md); para
-qué afirmar con ella, la [guía de la charla](CHARLA.md); para las amenazas y los controles, ver
+confianza. Para *por qué* existe la demo, ver el [README](../README.md); para las amenazas y los controles, ver
 [SECURITY.md](../SECURITY.md).
 
 Los diagramas viven en `docs/*.mmd`, que son la fuente de verdad. Este documento
@@ -30,7 +29,7 @@ title: "Nivel 1 — Contexto: mercado de predicción y nube autónoma"
 %% amontona las etiquetas. Colores C4: persona (azul oscuro), sistema propio (azul),
 %% sistema externo (gris).
 flowchart LR
-  publico["👥 <b>Audiencia de la charla</b><br/><i>[Persona]</i><br/>Apuesta desde el móvil con un token propio.<br/>Su tráfico es la demanda real."]
+  publico["👥 <b>Audiencia en la sala</b><br/><i>[Persona]</i><br/>Apuesta desde el móvil con un token propio.<br/>Su tráfico es la demanda real."]
   ponente["🎤 <b>Ponente</b><br/><i>[Persona]</i><br/>Opera la demo con la clave de ponente."]
 
   oraculo["<b>Oráculo</b><br/><i>[Sistema]</i><br/>Mercado LMSR, oráculo de IA y nube autónoma.<br/>El modelo propone; dos políticas en código deciden."]
@@ -81,7 +80,7 @@ Qué se ejecuta, dónde y cómo se habla. Todo vive en un proyecto de Google Clo
 C4Container
   title Nivel 2 — Contenedores en Google Cloud (proyecto oraculo-6d1578)
 
-  Person(publico, "Audiencia de la charla")
+  Person(publico, "Audiencia en la sala")
   Person(ponente, "Ponente")
 
   Container_Boundary(sistema, "Proyecto de Google Cloud") {

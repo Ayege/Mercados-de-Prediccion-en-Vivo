@@ -16,6 +16,7 @@ from .adapters.prices import CloudBillingPrices, FixedPrices
 from .adapters.topology.mock import MockTopologyGenerator
 from .adapters.topology.vertex import VertexTopologyGenerator
 from .adapters.vertex_client import VertexClient
+from .application.accounts import new_room_code
 from .application.cloud import CloudService
 from .application.infra import InfraController
 from .application.judges import CompositeJudge
@@ -90,7 +91,7 @@ def build_news(settings: Settings, service: MarketService) -> NewsService:
     else:
         desk, reader = MockNewsDesk(), MockNewsReader()
         media = REHEARSAL
-    return NewsService(service, desk, reader, media, agent_budget=settings.agent_budget,
+    return NewsService(service, service.repo, desk, reader, media, agent_budget=settings.agent_budget,
                        cooldown=settings.oracle_cooldown)
 
 
@@ -103,6 +104,7 @@ def build_service(settings: Settings, oracle: OracleGateway | None = None,
         judge=CompositeJudge(cloud, infra) if cloud else None,
         starting_balance=settings.starting_balance,
         oracle_cooldown=settings.oracle_cooldown,
+        room_code=new_room_code() if settings.room_code.strip().lower() == "auto" else settings.room_code,
     )
 
 

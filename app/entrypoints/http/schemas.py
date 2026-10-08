@@ -33,6 +33,7 @@ NAME = r"^[\w .-]{1,24}$"  # letras, dígitos, espacio, punto y guion: nada que 
 
 class Enter(BaseModel):
     name: str = Field(min_length=1, max_length=24, pattern=NAME)
+    code: str = Field("", max_length=12)  # el código de sala que muestra la proyección
 
 
 class Trade(BaseModel):

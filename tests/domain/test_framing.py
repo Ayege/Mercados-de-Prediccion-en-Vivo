@@ -1,7 +1,7 @@
 import pytest
 
 from app.domain.errors import MarketError
-from app.domain.framing import Exposure, Framing, FramingPolicy, Headline
+from app.domain.framing import Exposure, Framing, FramingExperiment, FramingPolicy, Headline
 from app.domain.market import Market
 from app.domain.verdict import Verdict
 
@@ -36,8 +36,8 @@ def test_summary_reports_only_group_aggregates():
     e.record("aye", "YES", 30)
     e.record("aye", "NO", 10)
     s = e.summary()
-    assert s[a] == {"exposed": 1, "traders": 1, "yes_share": 0.75}
-    assert s[b] == {"exposed": 1, "traders": 0, "yes_share": None}
+    assert s[a] == {"assigned": 1, "traders": 1, "yes_share": 0.75}
+    assert s[b] == {"assigned": 1, "traders": 0, "yes_share": None}
     assert "aye" not in str(s)
 
 
@@ -50,20 +50,20 @@ def test_headline_needs_a_source_and_https():
 
 def test_only_oracle_questions_can_be_framed():
     with pytest.raises(MarketError):
-        Market("m", "¿Pregunta?", "Criterio", kind="sala", framing=FRAMING)
+        Market("m", "¿Pregunta?", "Criterio", kind="sala", framing=FramingExperiment(FRAMING))
 
 
 def test_buying_records_the_buyers_group():
-    m = Market("m", "¿Pregunta?", "Criterio", framing=FRAMING)
+    m = Market("m", "¿Pregunta?", "Criterio", framing=FramingExperiment(FRAMING))
     m.buy("YES", 50, "aye")
-    arm = m.exposure.arms["aye"]
-    assert m.exposure.summary()[arm]["yes_share"] == 1.0
+    arm = m.framing.exposure.arms["aye"]
+    assert m.framing.exposure.summary()[arm]["yes_share"] == 1.0
 
 
 def test_unframed_market_ignores_the_buyer():
     m = Market("m", "¿Pregunta?", "Criterio")
     m.buy("YES", 50, "aye")
-    assert m.exposure.arms == {} and m.headline_for("aye") is None
+    assert m.framing is None and m.headline_for("aye") is None
 
 
 def test_framing_policy_accepts_a_verdict_that_does_not_depend_on_the_headline():

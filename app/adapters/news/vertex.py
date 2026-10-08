@@ -10,6 +10,7 @@ from datetime import date
 
 from ...domain.media import LEANS, Article, Estimate, MediaList, NewsFind
 from ..oracle.gemini import parse_verdict
+from ..prompt import dato
 from ..vertex_client import VertexClient
 from . import google_news
 
@@ -59,14 +60,14 @@ class VertexNewsDesk:
             return NewsFind(None, found, trace, self.model)
         # El modelo ve dos grupos, no «izquierda» y «derecha»: elige el asunto, no el lado.
         group = {LEANS[0]: "A", LEANS[1]: "B"}
-        listing = "\n".join(f"[{i}] grupo {group[a.outlet.lean]} · {a.outlet.name}: {a.headline}"
+        listing = "\n".join(f"[{i}] grupo {group[a.outlet.lean]} · {dato(a.outlet.name)}: {dato(a.headline)}"
                             for i, a in enumerate(found))
         trace.append(f"{len(found)} titular(es) numerados para {self.model}; el modelo solo elige números")
         try:
             payload = await self.client.generate({
                 "systemInstruction": {"parts": [{"text": DESK.format(today=date.today().isoformat())}]},
                 "contents": [{"role": "user", "parts": [
-                    {"text": f"<tema>{topic}</tema>\n<titulares>\n{listing}\n</titulares>"}]}],
+                    {"text": f"<tema>{dato(topic)}</tema>\n<titulares>\n{listing}\n</titulares>"}]}],
                 "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096,
                                      "responseMimeType": "application/json"},
             }, timeout=90)
@@ -87,8 +88,9 @@ class VertexNewsReader:
         self.model = client.model
 
     async def estimate(self, question: str, criteria: str, articles: list[Article]) -> Estimate:
-        lines = "\n".join(f'<titular medio="{a.outlet.name}">{a.headline}</titular>' for a in articles)
-        user = (f"<pregunta>{question}</pregunta>\n<criterio>{criteria}</criterio>\n"
+        lines = "\n".join(f'<titular medio="{dato(a.outlet.name)}">{dato(a.headline)}</titular>'
+                          for a in articles)
+        user = (f"<pregunta>{dato(question)}</pregunta>\n<criterio>{dato(criteria)}</criterio>\n"
                 f"<titulares>\n{lines}\n</titulares>")
         try:
             payload = await self.client.generate({

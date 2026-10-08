@@ -141,4 +141,6 @@ th, td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--
 th { color: var(--tenue); font-weight: 500; }
 .tabla { overflow-x: auto; }
 
+#ingreso { flex-direction: column; align-items: stretch; }
+#ingreso input { width: 100%; }
 #ingreso .pequeno { flex-basis: 100%; margin: 0; }

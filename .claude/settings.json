@@ -7,7 +7,27 @@
       "Bash(.venv/bin/pytest -q)",
       "Bash(.venv/bin/ruff check *)",
       "Bash(.venv/bin/python -c \"import app.application.news\")",
-      "WebSearch"
+      "WebSearch",
+      "Bash(.venv/bin/pytest -q -x)",
+      "Bash(sed -i '' '/is False or True/d' tests/security/test_superficie.py)",
+      "Bash(.venv/bin/pytest -q tests/security/test_superficie.py)",
+      "Bash(.venv/bin/pytest -q tests/adapters/test_news_adapters.py -k flaky)",
+      "Bash(.venv/bin/pip freeze *)",
+      "Bash(sed -i '' 's/Audiencia de la charla/Audiencia en la sala/g' docs/c4-nivel1-contexto.mmd docs/c4-nivel2-contenedores.mmd)",
+      "Bash(.venv/bin/python scripts/sincronizar_diagramas.py)",
+      "Bash(timeout 240 make diagramas)",
+      "Bash(echo \"render exit $?\")",
+      "Bash(make diagramas *)",
+      "Bash(.venv/bin/pytest -q tests/test_docs.py)",
+      "Bash(git check-ignore *)",
+      "Bash(gcloud builds *)",
+      "Bash(echo \"exit $?\")",
+      "Bash(gcloud projects *)",
+      "Bash(python3 -c ' *)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud auth *)",
+      "Bash(curl -s -X PATCH __TRACKED_VAR__/oraculo-nodo-pruebaiam?validateOnly=true -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'content-type: application/json' -d '{\"labels\":{\"oraculo-demo\":\"true\",\"prueba\":\"si\"}}')",
+      "Bash(python3 -c 'import sys,json;[print\\(b[\"role\"],b[\"members\"]\\) for b in json.load\\(sys.stdin\\).get\\(\"bindings\",[]\\)]')"
     ],
     "additionalDirectories": [
       "/Users/ayeshayege/Documents/oraculo/app/domain"

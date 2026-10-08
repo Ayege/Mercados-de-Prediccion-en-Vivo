@@ -12,3 +12,4 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+docs/CHARLA.md

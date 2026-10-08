@@ -1,4 +1,4 @@
-"""Oráculo simulado: ensayos de la charla y tests, sin tocar la red.
+"""Oráculo simulado: ensayos y tests, sin tocar la red.
 
 Devuelve un payload con la forma exacta de generateContent, así que pasa por
 `interpret` y la política igual que el adaptador real.
@@ -13,7 +13,7 @@ import hashlib
 import json
 import os
 
-from ...domain.framing import News
+from ...application.ports import OracleQuery
 from ...domain.verdict import VALID, AcceptancePolicy, Verdict
 from .gemini import run
 
@@ -25,7 +25,8 @@ class MockOracle:
     def __init__(self, policy: AcceptancePolicy | None = None):
         self.policy = policy or AcceptancePolicy()
 
-    async def _call(self, question: str, criteria: str, news: News | None = None) -> dict:
+    async def _call(self, query: OracleQuery) -> dict:
+        question, news = query.question, query.news
         # Se lee en cada llamada para poder fijar el veredicto durante un ensayo.
         force = os.getenv("ORACLE_MOCK_FORCE", "").upper()
         digest = hashlib.sha256(question.encode()).digest()
@@ -47,7 +48,6 @@ class MockOracle:
                                   "webSearchQueries": ["simulada"] if chunks else []},
         }]}
 
-    async def resolve(self, question: str, criteria: str, fault: str | None = None,
-                      news: News | None = None) -> Verdict:
+    async def resolve(self, query: OracleQuery) -> Verdict:
         trace = ["oráculo simulado, sin red"]
-        return await run(self._call, question, criteria, self.model, trace, self.policy, fault, news)
+        return await run(self._call, query, self.model, trace, self.policy)

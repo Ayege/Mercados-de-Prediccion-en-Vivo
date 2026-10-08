@@ -7,7 +7,8 @@ from app.main import build, build_cloud, build_infra, build_service
 
 def app_with(with_seed=False, **overrides):
     settings = Settings.from_env()
-    settings = Settings(**{**settings.__dict__, "oracle_cooldown": 0, "backend": "mock", **overrides})
+    defaults = {"oracle_cooldown": 0, "backend": "mock", "room_code": ""}
+    settings = Settings(**{**settings.__dict__, **defaults, **overrides})
     cloud = build_cloud(settings)
     infra = build_infra(settings, cloud)
     service = build_service(settings, cloud=cloud, infra=infra)
@@ -265,7 +266,7 @@ def test_rehearsal_infra_is_guarded_and_counts_demand(monkeypatch):
     for path in ("/api/infra/ciclo", "/api/infra/apagar"):
         assert c.post(path).status_code == 403
     assert c.post("/api/infra/actuar", params={"activo": True}).status_code == 403
-    c.get("/api/markets")
+    c.get("/api/users/aye", headers={"X-User-Token": token(c, "aye")})  # la audiencia autenticada
     v = c.post("/api/infra/ciclo", headers={"X-Presenter-Key": "k"}).json()
     assert v["rps"][-1]["real"] > 0
 

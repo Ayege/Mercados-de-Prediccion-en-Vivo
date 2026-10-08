@@ -48,3 +48,13 @@ def test_account_settles_one_credit_per_winning_share():
     a.add_shares("m", "NO", 5)
     a.settle("m", "YES")
     assert a.balance == 130
+
+
+def test_price_history_stays_bounded_and_keeps_both_ends():
+    from app.domain.market import MAX_HISTORY
+
+    m = Market("m", "¿Pregunta?", "Criterio")
+    for i in range(3 * MAX_HISTORY):
+        m.buy("YES" if i % 2 else "NO", 1)
+    assert len(m.history) <= MAX_HISTORY and m.orders == 3 * MAX_HISTORY
+    assert m.history[0] == 0.5 and m.history[-1] == m.prices()["YES"]

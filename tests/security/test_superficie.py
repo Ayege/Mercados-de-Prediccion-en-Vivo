@@ -53,22 +53,96 @@ def market(client):
     return r.json()["id"]
 
 
+def room_code(client):
+    return client.get("/api/sala", headers={"X-Presenter-Key": KEY}).json()["code"]
+
+
 def enter(client, name):
-    return client.post("/api/entrar", json={"name": name}).json()["token"]
+    r = client.post("/api/entrar", json={"name": name, "code": room_code(client)})
+    return r.json()["token"]
 
 
 # --- A01 Control de acceso -----------------------------------------------------------
 
 
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Lecturas reservadas al ponente: revelan el código de sala o borradores sin publicar.
+PRESENTER_READS = {"/api/sala", "/api/noticias"}
+
+
+def concrete(path):
+    return re.sub(r"\{[^}]+\}", "x", path)
+
+
 def test_every_write_route_requires_the_presenter_unless_it_is_an_audience_write(env):
     app, client, _ = env
-    posts = [r for r in app.routes if isinstance(r, APIRoute) and "POST" in r.methods]
-    assert len(posts) > 10
-    for route in posts:
+    writes = [(r, m) for r in app.routes if isinstance(r, APIRoute) for m in r.methods & WRITE_METHODS]
+    assert len(writes) > 10 and any(m == "DELETE" for _, m in writes)
+    for route, method in writes:
         if route.path in AUDIENCE_WRITES:
             continue
-        path = route.path.replace("{market_id}", "x")
-        assert client.post(path).status_code == 403, f"{route.path} no exige la clave del ponente"
+        status = client.request(method, concrete(route.path)).status_code
+        assert status == 403, f"{method} {route.path} no exige la clave del ponente"
+
+
+def test_presenter_reads_require_the_presenter(env):
+    app, client, _ = env
+    paths = {r.path for r in app.routes if isinstance(r, APIRoute)}
+    assert PRESENTER_READS <= paths
+    for path in PRESENTER_READS:
+        assert client.get(path).status_code == 403, f"{path} no exige la clave del ponente"
+
+
+def test_entering_needs_the_room_code_shown_on_the_projector(env):
+    _, client, _ = env
+    assert client.post("/api/entrar", json={"name": "afuera"}).status_code == 401
+    assert client.post("/api/entrar", json={"name": "afuera", "code": "XXXXXX"}).status_code == 401
+    assert client.get("/api/info").json()["room_code_required"] is True
+    assert "code" not in str(client.get("/api/info").json()).lower().replace("room_code_required", "")
+    code = room_code(client)
+    assert client.post("/api/entrar", json={"name": "adentro", "code": code.lower()}).status_code == 201
+
+
+def test_production_refuses_to_start_without_a_room_code():
+    s = Settings(**{**Settings().__dict__, "production": True, "presenter_key": KEY, "room_code": " "})
+    with pytest.raises(RuntimeError, match="SALA_CODIGO"):
+        s.check()
+
+
+def test_anonymous_traffic_is_not_counted_as_demand(env):
+    _, client, infra = env
+    for _ in range(20):
+        client.get("/api/markets")
+        client.get("/api/users/nadie", headers={"X-User-Token": "falso"})
+    assert infra._requests == 0
+    token = enter(client, "aye")
+    client.get("/api/users/aye", headers={"X-User-Token": token})
+    assert infra._requests == 1
+
+
+def test_presenter_actions_leave_an_audit_line(env):
+    import logging
+
+    class Collect(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.lines = []
+
+        def emit(self, record):
+            self.lines.append(record.getMessage())
+
+    collect = Collect()
+    logging.getLogger("oraculo.auditoria").addHandler(collect)
+    try:
+        _, client, _ = env
+        market(client)
+        client.post("/api/nube/iniciar", headers={"X-Presenter-Key": "mala"})  # el intento también queda
+    finally:
+        logging.getLogger("oraculo.auditoria").removeHandler(collect)
+    lines = collect.lines
+    assert any('"ruta": "/api/nube/iniciar"' in ln and '"estado": 403' in ln for ln in lines)
+    assert any("/api/markets" in ln and "201" in ln and "ponente" in ln for ln in lines)
+    assert KEY not in "".join(lines)
 
 
 @pytest.mark.parametrize("path", ["/api/markets/x/trade", "/api/markets/x/census"])
@@ -96,7 +170,7 @@ def test_nobody_can_trade_with_someone_elses_name(env):
 def test_names_cannot_be_taken_twice(env):
     _, client, _ = env
     enter(client, "aye")
-    assert client.post("/api/entrar", json={"name": "AYE"}).status_code == 409
+    assert client.post("/api/entrar", json={"name": "AYE", "code": room_code(client)}).status_code == 409
 
 
 def test_balances_are_private(env):

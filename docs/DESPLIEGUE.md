@@ -8,9 +8,9 @@ proyecto `oraculo-6d1578`.
 - [Una sola vez: proyecto, APIs e identidades](#una-sola-vez-proyecto-apis-e-identidades)
 - [Primer despliegue](#primer-despliegue)
 - [Publicar cambios](#publicar-cambios)
-- [Cambiar de charla](#cambiar-de-charla)
+- [Cambiar las preguntas](#cambiar-las-preguntas)
 - [Comprobar](#comprobar)
-- [Después de la charla](#después-de-la-charla)
+- [Al terminar una sesión](#al-terminar-una-sesión)
 
 ## Costos
 
@@ -25,7 +25,7 @@ proyecto `oraculo-6d1578`.
 | Imágenes | Almacenamiento | Se conservan las 3 más recientes |
 | Todo el proyecto | — | Presupuesto de 10 USD/mes con alertas al 50, 90 y 100 %. **Un presupuesto alerta, no corta** |
 
-**Durante la charla, sube a `--min-instances 1`.** Con mínimo 0 y máximo 1, las
+**Durante una sesión en vivo, sube a `--min-instances 1`.** Con mínimo 0 y máximo 1, las
 peticiones que llegan mientras la instancia arranca en frío reciben un 429 de
 Cloud Run. Cuesta unos 1,4 centavos por hora:
 
@@ -34,8 +34,8 @@ gcloud run services update oraculo-api --region us-east1 --min-instances 1   # a
 gcloud run services update oraculo-api --region us-east1 --min-instances 0   # al terminar
 ```
 
-Con la escala a cero, el estado del mercado se pierde cuando la API duerme. En
-una charla no pasa, porque los móviles la mantienen despierta.
+Con la escala a cero, el estado del mercado se pierde cuando la API duerme.
+Durante una sesión no pasa, porque los móviles la mantienen despierta.
 
 ## Una sola vez: proyecto, APIs e identidades
 
@@ -57,9 +57,11 @@ gcloud artifacts repositories create oraculo --repository-format=docker --locati
 RUN=oraculo-run@$PROJECT_ID.iam.gserviceaccount.com         # la API y el controlador
 NODO=oraculo-nodo@$PROJECT_ID.iam.gserviceaccount.com       # los nodos: sin ningún rol
 VIG=oraculo-vigilia@$PROJECT_ID.iam.gserviceaccount.com     # Cloud Scheduler: sin ningún rol
+BUILD=oraculo-build@$PROJECT_ID.iam.gserviceaccount.com     # el pipeline: solo publicar y desplegar
 gcloud iam service-accounts create oraculo-run --display-name="oraculo-api en Cloud Run"
 gcloud iam service-accounts create oraculo-nodo --display-name="Nodos reales (sin roles)"
 gcloud iam service-accounts create oraculo-vigilia --display-name="Cloud Scheduler: vigilia (sin roles)"
+gcloud iam service-accounts create oraculo-build --display-name="Cloud Build: pipeline (permisos mínimos)"
 
 # La clave de ponente vive en Secret Manager, legible solo por oraculo-run.
 openssl rand -hex 16 | tr -d '\n' | gcloud secrets create oraculo-presenter-key \
@@ -67,23 +69,32 @@ openssl rand -hex 16 | tr -d '\n' | gcloud secrets create oraculo-presenter-key 
 gcloud secrets add-iam-policy-binding oraculo-presenter-key \
   --member="serviceAccount:$RUN" --role=roles/secretmanager.secretAccessor
 
-for role in roles/aiplatform.user roles/run.developer roles/run.invoker; do
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$RUN" --role=$role --condition=None
-done
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$RUN" \
+  --role=roles/aiplatform.user --condition=None
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$RUN" \
+  --role=roles/run.invoker --condition=None
+# run.developer con condición: crear y modificar solo oraculo-nodo-* y oraculo-agente-*.
+# Listar se permite porque su recurso es la ubicación, no un servicio.
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$RUN" --role=roles/run.developer \
+  --condition='title=solo-servicios-de-la-demo,expression=resource.name.extract("/services/{s}") == "" || resource.name.extract("/services/{s}").startsWith("oraculo-nodo-") || resource.name.extract("/services/{s}").startsWith("oraculo-agente-")'
+
 # Desplegar nodos que corren como oraculo-nodo, con la imagen del repositorio:
 gcloud iam service-accounts add-iam-policy-binding $NODO --member="serviceAccount:$RUN" \
   --role=roles/iam.serviceAccountUser
 gcloud artifacts repositories add-iam-policy-binding oraculo --location=$REGION \
   --member="serviceAccount:$RUN" --role=roles/artifactregistry.reader
 
-# Cloud Build construye con la cuenta de Compute en proyectos nuevos.
-PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
-BUILDER=$PROJECT_NUMBER-compute@developer.gserviceaccount.com
-for role in roles/cloudbuild.builds.builder roles/run.developer; do
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$BUILDER" --role=$role --condition=None
-done
-gcloud iam service-accounts add-iam-policy-binding $RUN --member="serviceAccount:$BUILDER" \
+# El pipeline corre como oraculo-build (lo fija cloudbuild.yaml), nunca como la cuenta de
+# Compute por defecto, que en muchos proyectos tiene Editor sobre todo.
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$BUILD" \
+  --role=roles/logging.logWriter --condition=None
+gcloud artifacts repositories add-iam-policy-binding oraculo --location=$REGION \
+  --member="serviceAccount:$BUILD" --role=roles/artifactregistry.writer
+gcloud iam service-accounts add-iam-policy-binding $RUN --member="serviceAccount:$BUILD" \
   --role=roles/iam.serviceAccountUser
+gcloud storage buckets add-iam-policy-binding gs://${PROJECT_ID}_cloudbuild \
+  --member="serviceAccount:$BUILD" --role=roles/storage.objectViewer
+# Tras el primer despliegue (abajo): run.developer solo sobre oraculo-api.
 
 # Ahorro: imágenes viejas fuera, y alertas de gasto.
 cat > /tmp/limpieza.json <<'JSON'
@@ -100,12 +111,16 @@ Por qué cada permiso, y por qué ninguno más:
 
 | Permiso | Para qué |
 | --- | --- |
-| `run.developer` | Crear, escalar y borrar nodos. No incluye cambiar permisos IAM de servicios, así que los nodos no pueden volverse públicos |
+| `run.developer`, con condición, para `oraculo-run` | Crear y modificar solo servicios `oraculo-nodo-*` y `oraculo-agente-*` (verificado: modificar `oraculo-api` o crear otro servicio da 403). No incluye cambiar permisos IAM, así que no pueden volverse públicos. Límite: Cloud Run no informa el nombre del servicio al revisar lecturas y borrados, así que la condición no los restringe |
 | `run.invoker` | Sondear los nodos, que son privados, con un token de identidad |
 | `serviceAccountUser`, solo sobre `oraculo-nodo` | Desplegar nodos que corren sin roles |
 | `artifactregistry.reader`, solo sobre el repositorio | Cloud Run comprueba que quien despliega pueda leer la imagen; sin él, crear un nodo da 403 |
 | `secretAccessor`, solo sobre `oraculo-presenter-key` | Que la API lea su clave y ningún otro secreto |
 | `oraculo-vigilia`, sin roles | Solo firma el token OIDC con el que Cloud Scheduler se presenta |
+| `oraculo-build`: `artifactregistry.writer` en el repositorio, `run.developer` solo en `oraculo-api`, `serviceAccountUser` solo sobre `oraculo-run`, lectura del bucket de fuentes y `logWriter` | Publicar la imagen y desplegar la API. Si una herramienta del pipeline estuviera comprometida, no alcanza al resto del proyecto |
+
+Comprueba que la cuenta de Compute por defecto no tenga `roles/editor`: si el
+proyecto se la dio al crearse, quítasela.
 
 ## Primer despliegue
 
@@ -121,6 +136,8 @@ gcloud run deploy oraculo-api --image $IMAGE --region $REGION --service-account 
   --set-secrets PRESENTER_KEY=oraculo-presenter-key:latest \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,ORACLE_BACKEND=vertex,VERTEX_LOCATION=global,\
 SEED_SET=encuadre+nube_real,SIM_SEED=7,INFRA_MODE=real,NODO_IMAGEN=$IMAGE,NODO_CUENTA=$NODO"
+gcloud run services add-iam-policy-binding oraculo-api --region $REGION \
+  --member="serviceAccount:$BUILD" --role=roles/run.developer
 
 URL=$(gcloud run services describe oraculo-api --region $REGION --format='value(status.url)')
 gcloud run services update oraculo-api --region $REGION \
@@ -134,7 +151,9 @@ gcloud scheduler jobs create http oraculo-vigilia --location=$REGION --schedule=
   mercados.
 - `--set-secrets`: la clave nunca aparece como variable legible en la consola.
 - En Cloud Run la API **se niega a arrancar** sin una clave de al menos 32
-  caracteres, y cierra `/api/docs`.
+  caracteres o sin código de sala, y cierra `/api/docs`.
+- El código de sala (`SALA_CODIGO`) se genera solo al arrancar cada revisión y
+  aparece en la proyección de quien modera. Para fijarlo, pon un valor propio.
 - `INFRA_MODE=plan` es un buen primer paso: Cloud Run valida cada acción y no
   crea nada.
 
@@ -153,6 +172,15 @@ gcloud builds submit --config cloudbuild.yaml --region $REGION --project $PROJEC
 Pasa `--project` siempre: si gcloud tiene otro proyecto configurado por defecto,
 el build se iría a ese.
 
+Las imágenes del pipeline van fijadas por digest y las dependencias de Python por
+hash. Para actualizarlas:
+
+- **Dependencias:** cambia `requirements.txt` o `requirements-dev.txt` y corre
+  `make lock`. El lock de desarrollo respeta las versiones de producción.
+- **Imágenes:** consulta el digest nuevo de la etiqueta (por ejemplo, con
+  `docker buildx imagetools inspect aquasec/trivy:0.57.1`) y cámbialo en
+  `cloudbuild.yaml`, en un commit propio.
+
 Para que corra en cada push, conecta el repositorio de GitHub en la consola
 (Cloud Build → Repositorios) y crea el trigger. Ajusta `--branch-pattern` a la
 rama que de verdad publicas (hoy, `master`):
@@ -163,12 +191,12 @@ gcloud builds triggers create github --name=oraculo-main \
   --branch-pattern='^master$' --build-config=cloudbuild.yaml
 ```
 
-## Cambiar de charla
+## Cambiar las preguntas
 
 Para cambiar las preguntas sin publicar código nuevo, cambia `SEED_SET`. Las
 preguntas se vuelven a sembrar al arrancar la nueva revisión, así que **se
-pierden los mercados abiertos**. Los juegos están en
-[CHARLA.md](CHARLA.md#elegir-las-preguntas).
+pierden los mercados abiertos** y cambia el código de sala. Los juegos están en
+[PREGUNTAS.md](PREGUNTAS.md#juegos-de-preguntas).
 
 ```bash
 gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=encuadre+nube_real
@@ -186,7 +214,7 @@ echo "Proyección: $URL/proyeccion.html#clave=$PRESENTER_KEY"
 echo "Nube:       $URL/nube.html#clave=$PRESENTER_KEY"
 ```
 
-## Después de la charla
+## Al terminar una sesión
 
 En `/nube.html`, **Apagar todo** borra nodos y agentes. Si te olvidas, la
 vigilia los borra a los 30 minutos. Para comprobar que no quedó nada:
@@ -201,7 +229,7 @@ for s in $(gcloud run services list --filter="metadata.labels.oraculo-demo=true"
 done
 ```
 
-Cambia la clave de ponente, porque queda en el historial del navegador que
+Cambia la clave de moderación, porque queda en el historial del navegador que
 proyectó:
 
 ```bash

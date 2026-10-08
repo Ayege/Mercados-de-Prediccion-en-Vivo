@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from ...domain.framing import News
+from ...application.ports import OracleQuery
 from ...domain.verdict import AcceptancePolicy, Verdict
+from ..prompt import dato
 from ..vertex_client import VertexClient
 from .gemini import run
 
@@ -39,13 +40,15 @@ class VertexOracle:
         self.model = client.model
         self.policy = policy
 
-    async def _call(self, question: str, criteria: str, news: News | None = None) -> dict:
+    async def _call(self, query: OracleQuery) -> dict:
         system = SYSTEM.format(today=date.today().isoformat())
-        user = f"<pregunta>{question}</pregunta>\n<criterio>{criteria}</criterio>"
-        if news and news.trusted:
+        user = f"<pregunta>{dato(query.question)}</pregunta>\n<criterio>{dato(query.criteria)}</criterio>"
+        news = query.news
+        if news and news.trusted:  # el fallo que se enseña: sin escapar y como instrucción
             system += TRUSTED_NEWS.format(source=news.headline.source, text=news.headline.text)
         elif news:
-            user += f"\n<noticia fuente=\"{news.headline.source}\">{news.headline.text}</noticia>"
+            user += (f'\n<noticia fuente="{dato(news.headline.source)}">'
+                     f"{dato(news.headline.text)}</noticia>")
         return await self.client.generate({
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -53,7 +56,6 @@ class VertexOracle:
             "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
         })
 
-    async def resolve(self, question: str, criteria: str, fault: str | None = None,
-                      news: News | None = None) -> Verdict:
+    async def resolve(self, query: OracleQuery) -> Verdict:
         trace = [f"consultando a {self.model} en Vertex AI ({self.client.location})"]
-        return await run(self._call, question, criteria, self.model, trace, self.policy, fault, news)
+        return await run(self._call, query, self.model, trace, self.policy)

@@ -53,7 +53,7 @@ class Clock:
 
 def news(desk=None, reader=None, media=MEDIA, clock=None):
     markets = MarketService(InMemoryRepository(), oracle=None, oracle_cooldown=0)
-    return NewsService(markets, desk or Desk(), reader or Reader(), media,
+    return NewsService(markets, markets.repo, desk or Desk(), reader or Reader(), media,
                        clock=clock or Clock(), cooldown=30)
 
 
@@ -138,7 +138,7 @@ def test_resolution_shows_which_diet_made_money():
     class Yes:
         name = model = "fake"
 
-        async def resolve(self, question, criteria, fault=None, news=None):
+        async def resolve(self, query):
             from app.domain.verdict import Verdict
             return Verdict("YES", 1.0, "", trace=["fake"])
 

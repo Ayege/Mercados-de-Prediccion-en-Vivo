@@ -99,3 +99,17 @@ def test_agent_respects_its_budget_and_skips_small_edges():
     assert stake_for(0.99, [0.0, 0.0], 100.0, budget=50) == ("YES", 50.0)
     assert stake_for(0.52, [0.0, 0.0], 100.0, budget=50) == (None, 0.0)
     assert stake_for(None, [0.0, 0.0], 100.0, budget=50) == (None, 0.0)
+
+
+def test_agents_cannot_read_twice_at_once():
+    from app.domain.media import NewsCoverage
+
+    c = NewsCoverage("tasa", [art(LEFT), art(RIGHT)])
+    c.start_reading()
+    with pytest.raises(MarketError, match="ya están leyendo"):
+        c.start_reading()
+    c.abort()
+    c.start_reading()
+    c.finish([object()])
+    with pytest.raises(MarketError, match="ya opinaron"):
+        c.start_reading()

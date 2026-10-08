@@ -14,11 +14,10 @@ import copy
 import json
 from collections.abc import Awaitable, Callable
 
-from ...application.ports import FAULTS
-from ...domain.framing import News
+from ...application.ports import FAULTS, OracleQuery
 from ...domain.verdict import AcceptancePolicy, Proposal, Source, Verdict
 
-Call = Callable[[str, str, News | None], Awaitable[dict]]
+Call = Callable[[OracleQuery], Awaitable[dict]]
 
 
 class NetworkDown(Exception):
@@ -107,9 +106,10 @@ def interpret(payload: dict, model: str, trace: list[str], policy: AcceptancePol
     return policy.apply(Proposal.from_raw(raw), evidence, model, trace, suggestions)
 
 
-async def run(call: Call, question: str, criteria: str, model: str, trace: list[str],
-              policy: AcceptancePolicy, fault: str | None = None, news: News | None = None) -> Verdict:
+async def run(call: Call, query: OracleQuery, model: str, trace: list[str],
+              policy: AcceptancePolicy) -> Verdict:
     """Llamada, fallo inyectado e interpretación. Nunca lanza por un fallo del modelo."""
+    fault, news = query.fault, query.news
     if fault and fault not in FAULTS:
         raise ValueError(f"fallo desconocido: {fault}")
     if news:
@@ -119,7 +119,7 @@ async def run(call: Call, question: str, criteria: str, model: str, trace: list[
         if fault == "red_caida":
             trace.append(f"fallo inyectado: {fault} ({FAULTS[fault]})")
             raise NetworkDown("conexión rechazada")
-        payload = await call(question, criteria, news)
+        payload = await call(query)
     except Exception as exc:
         trace.append(f"error al llamar al modelo ({type(exc).__name__}) → UNRESOLVED (fail-closed)")
         return policy.unreachable(model, trace)

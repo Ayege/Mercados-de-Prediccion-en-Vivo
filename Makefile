@@ -1,8 +1,8 @@
 .PHONY: install test lint seguridad lock diagramas run docker
 
 install:
-	python -m venv .venv && .venv/bin/pip install --require-hashes -r requirements.lock \
-		&& .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pre-commit install
+	python -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.lock \
+		&& .venv/bin/pre-commit install
 
 test:
 	.venv/bin/pytest -q
@@ -14,12 +14,16 @@ lint:
 seguridad:
 	.venv/bin/ruff check . --select S
 	.venv/bin/pip-audit --require-hashes -r requirements.lock
+	.venv/bin/pip-audit --require-hashes -r requirements-dev.lock
 	.venv/bin/pytest -q tests/security tests/test_architecture.py tests/test_docs.py
 	.venv/bin/pre-commit run gitleaks --all-files
 
-# Tras cambiar requirements.txt: regenera el lock con hashes para todas las plataformas.
+# Tras cambiar requirements.txt o requirements-dev.txt: regenera los dos locks con hashes.
+# El de desarrollo incluye el de producción y respeta sus versiones.
 lock:
 	uv pip compile requirements.txt --universal --python-version 3.12 --generate-hashes -o requirements.lock
+	uv pip compile requirements.txt requirements-dev.txt -c requirements.lock --universal \
+		--python-version 3.12 --generate-hashes -o requirements-dev.lock
 
 # Tras editar docs/*.mmd: copia los diagramas en docs/ARQUITECTURA.md y renderiza el de contexto.
 diagramas:

@@ -31,12 +31,13 @@ def headline_view(h: Headline | None) -> dict | None:
 def framing_view(m: Market) -> dict | None:
     """Agregados por grupo, siempre. Los titulares, solo al revelar o al resolver:
     la proyección la ve toda la sala, y mostrarlos antes arruinaría el experimento."""
-    if m.framing is None:
+    f = m.framing
+    if f is None:
         return None
-    out = {"groups": m.exposure.summary(), "revealed": m.revealed, "headlines": None}
-    if m.revealed:
-        out["headlines"] = {"pro_si": headline_view(m.framing.pro_si),
-                            "pro_no": headline_view(m.framing.pro_no)}
+    out = {"groups": f.exposure.summary(), "revealed": f.revealed, "headlines": None}
+    if f.revealed:
+        out["headlines"] = {"pro_si": headline_view(f.framing.pro_si),
+                            "pro_no": headline_view(f.framing.pro_no)}
     return out
 
 
@@ -82,14 +83,16 @@ def market_view(m: Market) -> dict:
         "status": m.status,
         "outcome": m.outcome,
         "history": list(m.history),
+        "orders": m.orders,
         "volume": round(m.volume, 2),
         "oracle": oracle,
         "attempts": [attempt_view(a) for a in m.attempts],
         "max_loss": round(m.max_loss, 2),
         "framing": framing_view(m),
-        "topic": m.topic or None,
-        "coverage": [article_view(a) for a in m.coverage],
-        "agents": [agent_read_view(r, m.outcome) for r in m.agent_reads],
+        "topic": m.news.topic if m.news else None,
+        "coverage": [article_view(a) for a in m.news.articles] if m.news else [],
+        "agents": [agent_read_view(r, m.outcome) for r in m.news.reads] if m.news else [],
+        "agents_reading": bool(m.news and m.news.reading),
     }
 
 

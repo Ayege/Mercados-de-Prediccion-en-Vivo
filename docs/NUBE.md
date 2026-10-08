@@ -2,7 +2,7 @@
 
 `/nube.html` muestra una nube que intenta gobernarse sola. La visión completa
 (infraestructura que se gobierna, se optimiza y se repara sola en un mercado
-descentralizado) es mucho más grande de lo que cabe en una charla, y casi todo
+descentralizado) es mucho más grande de lo que cabe en una demo, y casi todo
 en ella es todavía investigación. Cada pieza está aquí en su versión más pequeña
 que todavía es honesta, y la interfaz dice cuál es.
 

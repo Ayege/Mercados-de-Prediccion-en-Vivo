@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..domain.cloud.infra import NodeState, Probe
@@ -28,19 +29,31 @@ FRAMING_FAULTS = {
 }
 
 
+@dataclass(frozen=True)
+class OracleQuery:
+    """Una consulta al oráculo.
+
+    `fault` corrompe la respuesta para ensayar la política (ver FAULTS). Si hay
+    `news`, el modelo la lee: como dato no confiable o, si `news.trusted`, como el
+    hecho verificado que un pipeline descuidado le pasaría.
+    """
+
+    question: str
+    criteria: str
+    fault: str | None = None
+    news: News | None = None
+
+
 class OracleGateway(Protocol):
     """Un componente no confiable que propone un veredicto con evidencia.
 
     Contrato: nunca lanza. Ante cualquier fallo devuelve un Verdict UNRESOLVED.
-    Si recibe `news`, se la muestra al modelo: como dato no confiable o, si
-    `news.trusted`, como el hecho verificado que un pipeline descuidado le pasaría.
     """
 
     name: str
     model: str
 
-    async def resolve(self, question: str, criteria: str, fault: str | None = None,
-                      news: News | None = None) -> Verdict: ...
+    async def resolve(self, query: OracleQuery) -> Verdict: ...
 
 
 class Repository(Protocol):

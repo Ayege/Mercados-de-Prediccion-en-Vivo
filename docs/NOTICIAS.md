@@ -27,7 +27,9 @@ en su móvil.
 - **Asignación.** Aleatorización en bloques: el grupo más chico recibe a la
   siguiente persona y, si están empatados, decide un hash del nombre. Los grupos
   nunca se separan por más de una persona, y nadie elige su grupo.
-- **Qué se mide.** Por grupo: cuántas personas vieron el titular, cuántas
+- **Cuándo.** Cada persona recibe su grupo al entrar, o al crearse la pregunta
+  si ya estaba en la sala. Consultar la cuenta nunca cambia el experimento.
+- **Qué se mide.** Por grupo: a cuántas personas les tocó cada titular, cuántas
   apostaron y qué parte del dinero fue al SÍ. Solo agregados, nunca quién vio
   qué.
 - **Qué ve la proyección.** Los dos grupos y su diferencia, en vivo. Los
@@ -42,7 +44,7 @@ correlación. Con ochenta personas puede ser ruido, y la proyección lo dice.
 ### Crear una pregunta con encuadre
 
 Los titulares del juego `encuadre` son **titulares de ensayo**: los escribió el
-proyecto y la pantalla los marca así. Antes de una charla, cámbialos por
+proyecto y la pantalla los marca así. Para usarlo en serio, cámbialos por
 titulares reales con su enlace (`https` obligatorio). Nunca atribuyas a un medio
 un titular que no publicó.
 
@@ -81,7 +83,7 @@ el ponente escribe un tema en «Pregunta desde las noticias».
 
 1. **Búsqueda en Google News.** El servidor busca el tema en el RSS de Google
    News, una vez por lado, solo en los medios de la lista (`site:`) y en los
-   últimos 7 días. Google News atribuye cada titular a su medio; uno de un medio
+   últimos 7 días, con un reintento si el RSS falla. Google News atribuye cada titular a su medio; uno de un medio
    que no está en la lista se descarta. Las ediciones en español cuentan como su
    medio: cnnespanol.cnn.com es CNN.
 2. **El editor (Gemini, sin buscar)** recibe esos titulares numerados en dos
@@ -95,10 +97,14 @@ el ponente escribe un tema en «Pregunta desde las noticias».
 4. **El ponente abre la pregunta.** La sala apuesta como en cualquier otra.
 5. **«Que opinen los agentes».** Cuatro agentes Gemini leen la misma cobertura,
    cada uno solo lo que su dieta permite: solo izquierda, solo derecha, ambas o
-   ninguna. No buscan en internet. Cada uno estima P(SÍ) y compra hasta llevar el
+   ninguna. No buscan en internet. Los titulares les llegan escapados, como dato,
+   para que uno que diga «</titular>» no pueda salirse de su etiqueta. Cada uno
+   estima P(SÍ) y compra hasta llevar el
    precio a su creencia, con un tope de 200 créditos (`AGENTES_PRESUPUESTO`). La
    proyección muestra qué leyó cada uno, qué creyó, contra qué precio y cuánto
    apostó.
+   Mientras leen, la pregunta queda marcada «leyendo» en el propio mercado: un
+   segundo pedido no los hace leer dos veces.
 6. **Al resolver**, la misma tarjeta dice qué dieta ganó dinero y cuál perdió.
 
 | Paso | Tiempo | Llamadas a Gemini |
@@ -115,7 +121,7 @@ el ponente escribe un tema en «Pregunta desde las noticias».
 - **Un LLM no es una hoja en blanco.** En la primera prueba real (inmigración,
   octubre de 2026) las cuatro dietas creyeron entre 80 y 88 %: el agente que no
   leyó nada respondió con lo que ya sabía. La dieta mueve a los agentes en
-  algunos temas y casi nada en otros. Ensaya temas antes de la charla.
+  algunos temas y casi nada en otros.
 
 ### La lista de medios
 

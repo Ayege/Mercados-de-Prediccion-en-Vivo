@@ -49,7 +49,19 @@ def parse(feed: str, media: MediaList) -> list[Article]:
     return out
 
 
-async def _fetch(client: httpx.AsyncClient, query: str) -> str:
+async def _fetch(client: httpx.AsyncClient, query: str, attempts: int = 2) -> str:
+    """Un reintento tras un segundo: el RSS no tiene acuerdo de servicio y a veces falla suelto."""
+    for attempt in range(attempts):
+        try:
+            return await _fetch_once(client, query)
+        except httpx.HTTPError:
+            if attempt == attempts - 1:
+                raise
+            await asyncio.sleep(1.0)
+    raise AssertionError("inalcanzable")  # pragma: no cover
+
+
+async def _fetch_once(client: httpx.AsyncClient, query: str) -> str:
     params = {"q": query, "hl": "es-419", "gl": "US", "ceid": "US:es-419"}
     async with client.stream("GET", SEARCH, params=params, follow_redirects=False) as r:
         r.raise_for_status()

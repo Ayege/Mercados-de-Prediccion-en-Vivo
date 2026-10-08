@@ -43,6 +43,7 @@ class Settings:
     vigil_audience: str = ""
     media_file: str = DEFAULT_MEDIA  # la lista de medios y su inclinación, definida por el ponente
     agent_budget: float = 200.0  # créditos que arriesga cada agente de noticias por pregunta
+    room_code: str = "auto"  # «auto»: se genera al arrancar; vacío: sin código (solo en local)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -79,6 +80,7 @@ class Settings:
             vigil_audience=env.get("VIGILIA_AUDIENCIA", ""),
             media_file=env.get("MEDIOS_ARCHIVO", DEFAULT_MEDIA),
             agent_budget=float(env.get("AGENTES_PRESUPUESTO", "200")),
+            room_code=env.get("SALA_CODIGO", "auto"),
         )
 
     def check(self) -> None:
@@ -87,6 +89,9 @@ class Settings:
         if needs_key and len(self.presenter_key) < 32:
             raise RuntimeError("PRESENTER_KEY debe tener al menos 32 caracteres en producción o con "
                                "INFRA_MODE=plan|real (genera una con: openssl rand -hex 16)")
+        if self.production and not self.room_code.strip():
+            raise RuntimeError("SALA_CODIGO no puede estar vacío en producción: sin código, cualquiera "
+                               "en internet puede llenar la sala")
         if self.infra_mode == "real" and self.vigil_account and not self.vigil_audience:
             raise RuntimeError("VIGILIA_CUENTA necesita VIGILIA_AUDIENCIA (la URL de la vigilia)")
 

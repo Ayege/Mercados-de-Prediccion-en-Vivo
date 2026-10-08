@@ -1,7 +1,7 @@
-"""Juegos de preguntas. Qué charla das decide qué preguntas siembras.
+"""Juegos de preguntas que se siembran al arrancar (ver docs/PREGUNTAS.md).
 
-Ver docs/CHARLA.md («Elegir las preguntas» y «Qué afirmar»). Se elige con SEED_SET; varios
-juegos se combinan con «+» (por ejemplo, `encuadre+nube_real`).
+Se elige con SEED_SET; varios juegos se combinan con «+» (por ejemplo,
+`encuadre+nube_real`).
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ ROLLBACK = (
     "sala",
 )
 # Las mismas preguntas, con dos titulares sobre el mismo hecho. Son titulares de ensayo,
-# escritos para la demo y marcados así en pantalla. Antes de una charla, cámbialos por
+# escritos para la demo y marcados así en pantalla. Para usarlos en serio, cámbialos por
 # titulares reales con su enlace; nunca atribuyas a un medio un titular que no publicó.
 ENSAYO = "titular de ensayo"
 PYTHON_ENCUADRADO = PYTHON + (Framing(
@@ -90,9 +90,9 @@ AUTORREPARACION_REAL = (
     "autorreparacion_real",
 )
 SEEDS = {
-    # Charla sobre el oráculo: creencia contra evidencia, y el sistema negándose a responder.
+    # Creencia contra evidencia, y el sistema negándose a responder.
     "oraculo": [KUBERNETES, PYTHON, DOLAR],
-    # Charla sobre el mecanismo: información dispersa que ningún buscador tiene.
+    # El mecanismo de agregación: información dispersa que ningún buscador tiene.
     "agregacion": [VIERNES, LLM, ROLLBACK],
     # Un ejemplo de cada tipo.
     "mixta": [PYTHON, DOLAR, VIERNES],
