@@ -98,6 +98,8 @@ COOPERACION_REAL = (
     "cooperacion_real",
 )
 SEEDS = {
+    # Ninguna: la sala empieza vacía y el ponente crea las preguntas desde las noticias.
+    "ninguna": [],
     # Creencia contra evidencia, y el sistema negándose a responder.
     "oraculo": [KUBERNETES, PYTHON, DOLAR],
     # El mecanismo de agregación: información dispersa que ningún buscador tiene.

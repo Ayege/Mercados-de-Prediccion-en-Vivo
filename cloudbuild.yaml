@@ -21,8 +21,9 @@ substitutions:
   _SERVICE: oraculo-api
   _REPO: oraculo
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
-  # Producción solo acepta preguntas reales (ver docs/PREGUNTAS.md). Otra: --substitutions=_SEED_SET=oraculo
-  _SEED_SET: real
+  # Producción empieza vacía: las preguntas se crean desde las noticias (ver docs/PREGUNTAS.md).
+  # Otra: --substitutions=_SEED_SET=real
+  _SEED_SET: ninguna
   # La foto del estado, para que la sala sobreviva a que la API escale a cero (ver docs/DESPLIEGUE.md).
   _STATE_BUCKET: ${PROJECT_ID}-estado
 

@@ -44,7 +44,8 @@ noticias no se siembran: se crean en vivo desde la proyección.
 
 | `SEED_SET` | Preguntas |
 | --- | --- |
-| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala`, la autorreparación de un nodo real y la cooperación del mercado real (4 agentes). **El único que acepta producción** |
+| `ninguna` | Ninguna: la sala empieza vacía y las preguntas se crean desde las noticias. **El que usa producción** |
+| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala`, la autorreparación de un nodo real y la cooperación del mercado real (4 agentes). Junto con `ninguna`, el único que acepta producción |
 | `oraculo` (default) | Kubernetes, Python (`presente`) y USD/DOP (`futuro`) |
 | `agregacion` | Tres preguntas `sala` sobre la práctica de quienes participan |
 | `mixta` | Python, USD/DOP y una pregunta `sala` |

@@ -64,6 +64,9 @@ def test_headlines_without_a_published_link_are_refused():
 
 def test_the_real_seed_set_is_the_only_one_production_accepts():
     seed(real_service(), "real")
+    empty = real_service()
+    seed(empty, "ninguna")
+    assert empty.list() == []
     for name in ("encuadre", "nube", "nube_real"):
         with pytest.raises(MarketError):
             seed(real_service(), name)
