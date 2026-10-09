@@ -16,11 +16,11 @@ from ..domain.market import Account, Market
 from ..domain.media import AGENTS, Article, NewsCoverage
 from ..domain.verdict import CensusPolicy
 from .accounts import Accounts
-from .errors import NotFound
+from .errors import require_market
 from .limits import SlidingWindow
 from .ports import OracleGateway, Repository, SimulationJudge
 from .resolution import Resolver
-from .views import account_view, market_view
+from .views import account_view, market_summary, market_view
 
 
 class MarketService:
@@ -75,19 +75,14 @@ class MarketService:
         return await self.resolver.resolve(market_id, fault)
 
     # --- lecturas ---------------------------------------------------------------
-    def _market(self, market_id: str) -> Market:
-        m = self.repo.get_market(market_id)
-        if m is None:
-            raise NotFound("mercado no encontrado")
-        return m
-
-    def list(self) -> list[dict]:
+    def list(self, summary: bool = False) -> list[dict]:
+        view = market_summary if summary else market_view
         with self.repo.transaction():
-            return [market_view(m) for m in self.repo.markets()]
+            return [view(m) for m in self.repo.markets()]
 
     def view(self, market_id: str) -> dict:
         with self.repo.transaction():
-            return market_view(self._market(market_id))
+            return market_view(require_market(self.repo, market_id))
 
     # --- escrituras -------------------------------------------------------------
     def create(self, question: str, criteria: str, b: float = 100.0, kind: str = "presente",
@@ -117,7 +112,7 @@ class MarketService:
         with self.repo.transaction():
             acc = self.accounts.authenticate(user, token)
             self.accounts.throttle(acc)
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             m.ensure_open()
             if amount > acc.balance:
                 raise MarketError("saldo insuficiente")
@@ -139,7 +134,7 @@ class MarketService:
             if acc is None:
                 acc = Account(agent, self.starting_balance)
                 self.repo.add_account(acc)
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             before = m.prices()["YES"]
             amount = min(amount, acc.balance)
             if amount <= 0:
@@ -153,14 +148,14 @@ class MarketService:
         with self.repo.transaction():
             acc = self.accounts.authenticate(user, token)
             self.accounts.throttle(acc)
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             m.answer_census(acc.name, answer)
             return {"census_count": len(m.census)}
 
     def reveal(self, market_id: str) -> dict:
         """Muestra los dos titulares en la proyección. La sala sigue pudiendo operar."""
         with self.repo.transaction():
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             if m.framing is None:
                 raise MarketError("esta pregunta no tiene titulares")
             m.framing.revealed = True

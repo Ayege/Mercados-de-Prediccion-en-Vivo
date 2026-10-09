@@ -78,3 +78,4 @@ def test_without_the_lab_only_real_topology_proposals_remain():
             action()
     view = asyncio.run(cloud.propose("evolutivo"))
     assert view["proposals"] and view["tick"] == 0
+    assert "series" not in view and "agents" not in view  # sin laboratorio no se serializa la simulación

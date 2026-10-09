@@ -1,13 +1,7 @@
 // Lógica de proyeccion.html. Va en un archivo aparte para que la CSP prohíba scripts en línea.
-// La clave del ponente viaja en el fragmento (#clave=…), que el navegador no envía al servidor ni a los logs.
-const clave = new URLSearchParams(location.hash.slice(1)).get("clave") || "";
 let info = {};
 const ocupado = new Set();
 const abiertos = new Set();
-
-function cabeceras() {
-  return clave ? { "X-Presenter-Key": clave } : {};
-}
 
 function contraste(m) {
   const v = m.oracle;
@@ -66,7 +60,7 @@ function agentes(m) {
   const titulo = `<p class="pequeno"><strong>Agentes y dieta de medios</strong> · cuatro agentes leen la misma
     cobertura, cada uno solo lo que su dieta le permite, y apuestan en este mercado.</p>`;
   if (!m.agents.length) {
-    const boton = m.status === "open" && !(info.presenter_key_required && !clave)
+    const boton = m.status === "open" && esPonente(info)
       ? `<button data-agentes="${m.id}" ${ocupado.has(m.id) ? "disabled" : ""}>
           ${ocupado.has(m.id) ? "Leyendo…" : "Que opinen los agentes"}</button>` : "";
     return `<div class="agentes">${titulo}<p class="pequeno tenue">Todavía no han leído nada.</p>${boton}</div>`;
@@ -126,7 +120,7 @@ function intentos(m) {
 }
 
 function ponente(m) {
-  if (m.status !== "open" || (info.presenter_key_required && !clave)) return "";
+  if (m.status !== "open" || !esPonente(info)) return "";
   const espera = ocupado.has(m.id);
   if (m.kind === "simulacion") {
     return `<div class="ponente fila">
@@ -160,7 +154,7 @@ async function pintar() {
   document.querySelectorAll("[data-fallo]").forEach(s => { fallos[s.dataset.fallo] = s.value; });
   abiertos.clear();
   document.querySelectorAll("details[data-intentos][open]").forEach(d => abiertos.add(d.dataset.intentos));
-  document.getElementById("lista").innerHTML = ordenar(mercados).map(m => {
+  pintarSi(document.getElementById("lista"), ordenar(mercados).map(m => {
     const p = m.prices.YES;
     const estado = m.status === "resolved"
       ? `<span class="chip">resuelto: ${RESULTADO[m.outcome]}</span>` : "";
@@ -178,7 +172,8 @@ async function pintar() {
       ${intentos(m)}
       ${ponente(m)}
     </article>`;
-  }).join("");
+  }).join("") || `<p class="tenue">Todavía no hay preguntas. ${esPonente(info) && info.news
+    ? "Crea una desde las noticias." : ""}</p>`);
   for (const [id, valor] of Object.entries(fallos)) {
     const s = document.querySelector(`[data-fallo="${id}"]`);
     if (s) s.value = valor;
@@ -290,7 +285,7 @@ document.getElementById("borradores").addEventListener("click", async e => {
     if (b.dataset.abrir) {
       await api(`/api/noticias/borradores/${b.dataset.abrir}/abrir`, { method: "POST", headers: cabeceras() });
     } else if (b.dataset.descartar) {
-      await fetch(`/api/noticias/borradores/${b.dataset.descartar}`, { method: "DELETE", headers: cabeceras() });
+      await api(`/api/noticias/borradores/${b.dataset.descartar}`, { method: "DELETE", headers: cabeceras() });
     }
   } catch (err) {
     error.textContent = err.message;
@@ -304,8 +299,8 @@ api("/api/info").then(i => {
   document.getElementById("info").textContent =
     `Oráculo: ${i.oracle} (${i.model}) · infraestructura: ${i.infra} · revisión ${i.revision} · ` +
     `audiencia en ${location.origin}`;
-  document.getElementById("sin-clave").hidden = !(i.presenter_key_required && !clave);
-  const ponente = !(i.presenter_key_required && !clave);
+  const ponente = esPonente(i);
+  document.getElementById("sin-clave").hidden = ponente;
   if (ponente && i.room_code_required) {
     api("/api/sala", { headers: cabeceras() })
       .then(s => { const c = document.getElementById("sala"); c.hidden = false; c.querySelector("strong").textContent = s.code; })
@@ -313,6 +308,5 @@ api("/api/info").then(i => {
   }
   document.getElementById("noticias").hidden = !(ponente && i.news);
   if (ponente && i.news) pintarNoticias().catch(err => { document.getElementById("error").textContent = err.message; });
-  pintar();
-  setInterval(() => pintar().catch(() => {}), 2000);
+  sondear(pintar, 2000);
 });

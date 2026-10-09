@@ -59,6 +59,15 @@ def test_trade_moves_price_and_balance(client):
     assert body["user"]["balance"] == 900
 
 
+def test_phones_get_a_summary_without_history_or_traces(client):
+    mid = new_market(client)
+    trade(client, mid, "aye", "YES", 100)
+    full = client.get("/api/markets").json()[0]
+    summary = client.get("/api/markets", params={"resumen": True}).json()[0]
+    assert summary["prices"] == full["prices"] and summary["status"] == "open"
+    assert set(summary) < set(full) and "history" not in summary and "attempts" not in summary
+
+
 def test_insufficient_balance_is_rejected(client):
     mid = new_market(client)
     assert trade(client, mid, "aye", "YES", 5000).status_code == 400

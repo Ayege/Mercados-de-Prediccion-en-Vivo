@@ -1,5 +1,4 @@
 // Lógica de nube.html. Va en un archivo aparte para que la CSP prohíba scripts en línea.
-const clave = new URLSearchParams(location.hash.slice(1)).get("clave") || "";
 const ARQ = ["cooperativo", "agresivo", "previsor", "austero"];
 const COLOR = i => `var(--serie-${i + 1})`;
 const RECURSOS = { cpu: "cpu", almacenamiento: "almacenamiento", ancho_banda: "ancho de banda" };
@@ -193,7 +192,7 @@ function topologia(v) {
   }
 }
 
-const cabeceras = () => ({ "Content-Type": "application/json", ...(clave ? { "X-Presenter-Key": clave } : {}) });
+const JSON_CON_CLAVE = () => cabeceras({ "Content-Type": "application/json" });
 let infraActiva = false;
 
 // Qué hacer ahora, según el estado: la página le habla al ponente.
@@ -224,7 +223,7 @@ function hora(t) {
 }
 
 async function pintarInfra(puedeControlar) {
-  const v = await api("/api/infra", { headers: clave ? { "X-Presenter-Key": clave } : {} });
+  const v = await api("/api/infra", { headers: cabeceras() });
   const caja = document.getElementById("infra");
   if (v.mode === "apagado") { caja.hidden = true; return; }
   caja.hidden = false;
@@ -242,7 +241,7 @@ async function pintarInfra(puedeControlar) {
     `último ciclo ${hora(v.last_cycle)} · límites: ${v.policy.max_services} servicios, ` +
     `${v.policy.max_total_min} instancias mínimas en total, ${v.policy.max_max_per_region} máximas por región, ` +
     `un cambio de escala cada ${v.policy.seconds_between_changes} s por región. ` +
-    `Si nadie mira esta página ${Math.round(v.ttl / 60)} min, la vigilia borra los nodos.`);
+    `Si nadie mira esta página ${Math.round(v.ttl / 60)} min (una pestaña oculta no cuenta), la vigilia borra los nodos.`);
   document.getElementById("infra-controles").hidden = !puedeControlar;
   document.querySelector('[data-infra="actuar"]').textContent = v.active ? "Pausar actuación" : "Activar actuación";
   const notas = [...(v.last_error ? [v.last_error] : []), ...v.notes];
@@ -368,20 +367,20 @@ document.getElementById("infra").addEventListener("click", async e => {
   } else return;
   b.disabled = true;
   try {
-    await api(ruta, { method: "POST", headers: cabeceras(), body: cuerpo });
+    await api(ruta, { method: "POST", headers: JSON_CON_CLAVE(), body: cuerpo });
   } catch (err) {
     error.textContent = err.message;
   } finally {
     b.disabled = false;
-    pintar();
+    pintar().catch(() => {});
   }
 });
 
 let puedeControlar = false;
 
 async function pintar() {
-  pintarInfra(puedeControlar).catch(() => {});
-  const v = await api("/api/nube");
+  // Las dos a la vez, pero el sondeo espera a ambas: un ciclo lento de Cloud Run no apila peticiones.
+  const [v] = await Promise.all([api("/api/nube"), pintarInfra(puedeControlar).catch(() => {})]);
   document.body.classList.toggle("sin-lab", !v.lab);
   texto("estado", (v.lab ? `${v.running ? "Corriendo" : "En pausa"} · semilla ${v.seed} · ` : "") +
     `generador de topologías: ${v.generator.name} (${v.generator.model})`);
@@ -400,7 +399,7 @@ document.getElementById("controles").addEventListener("click", async e => {
   if (!b) return;
   const error = document.getElementById("error");
   error.textContent = "";
-  const opciones = { method: "POST", headers: { "Content-Type": "application/json", ...(clave ? { "X-Presenter-Key": clave } : {}) } };
+  const opciones = { method: "POST", headers: JSON_CON_CLAVE() };
   let ruta;
   if (b.dataset.accion === "avanzar") ruta = `/api/nube/avanzar?n=${b.dataset.n}`;
   else if (b.dataset.accion) ruta = `/api/nube/${b.dataset.accion}`;
@@ -413,15 +412,14 @@ document.getElementById("controles").addEventListener("click", async e => {
     error.textContent = err.message;
   } finally {
     b.disabled = false;
-    pintar();
+    pintar().catch(() => {});
   }
 });
 
 api("/api/info").then(i => {
-  puedeControlar = !(i.presenter_key_required && !clave);
+  puedeControlar = esPonente(i);
   document.getElementById("sin-clave").hidden = puedeControlar;
   document.getElementById("enlace-proyeccion").href = `proyeccion.html${location.hash}`;
   document.getElementById("controles").hidden = !puedeControlar;
-  pintar();
-  setInterval(() => pintar().catch(() => {}), 1500);
+  sondear(pintar, 2000);
 });

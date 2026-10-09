@@ -87,8 +87,45 @@ function pct(p) {
 async function api(ruta, opciones = {}) {
   const r = await fetch(ruta, opciones);
   const cuerpo = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(cuerpo.detail?.[0]?.msg || cuerpo.detail || `error ${r.status}`);
+  if (!r.ok) {
+    const error = new Error(cuerpo.detail?.[0]?.msg || cuerpo.detail || `error ${r.status}`);
+    error.status = r.status;
+    throw error;
+  }
   return cuerpo;
+}
+
+// La clave del ponente viaja en el fragmento (#clave=…), que el navegador no envía al servidor ni a los logs.
+const clave = new URLSearchParams(location.hash.slice(1)).get("clave") || "";
+
+function cabeceras(extra = {}) {
+  return clave ? { ...extra, "X-Presenter-Key": clave } : extra;
+}
+
+// Sin clave en un servidor que la exige, los controles del ponente no se muestran.
+const esPonente = info => !(info.presenter_key_required && !clave);
+
+// Sondeo sin solapes y solo con la pestaña visible. Una pestaña olvidada en segundo plano no gasta
+// peticiones y, en la nube, deja de contar como «alguien mira»: la vigilia puede apagar los nodos.
+function sondear(fn, ms) {
+  let espera, enCurso = false;
+  async function vuelta() {
+    clearTimeout(espera);
+    if (enCurso || document.hidden) return;
+    enCurso = true;
+    try { await fn(); } catch { /* el siguiente sondeo reintenta */ } finally { enCurso = false; }
+    if (!document.hidden) espera = setTimeout(vuelta, ms);
+  }
+  document.addEventListener("visibilitychange", vuelta);
+  vuelta();
+}
+
+// Solo toca el DOM si el contenido cambió: así un sondeo no cierra un <select> abierto ni roba el foco.
+const pintados = new WeakMap();
+function pintarSi(el, html) {
+  if (pintados.get(el) === html) return;
+  pintados.set(el, html);
+  el.innerHTML = html;
 }
 
 function guardado(clave, valor) {

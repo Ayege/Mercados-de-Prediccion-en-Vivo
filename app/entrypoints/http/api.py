@@ -154,8 +154,8 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
         return service.enter(body.name, body.code)
 
     @app.get("/api/markets")
-    async def list_markets():
-        return service.list()
+    async def list_markets(resumen: bool = False):
+        return service.list(summary=resumen)
 
     @app.get("/api/markets/{market_id}")
     async def get_market(market_id: str):

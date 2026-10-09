@@ -16,7 +16,7 @@ from ..domain.cloud.simulation import Simulation
 from ..domain.errors import SimulationError
 from ..domain.verdict import Verdict
 from .ports import TopologyGenerator
-from .views import simulation_view
+from .views import simulation_view, topology_view
 
 MAX_CATCHUP = 50  # ticks por petición como máximo, para que una pausa larga no congele la API
 
@@ -45,8 +45,10 @@ class CloudService:
 
     def view(self) -> dict:
         with self._lock:
+            if not self.lab:  # la página solo pinta las topologías: no se serializa la simulación
+                return topology_view(self.sim, False, self.generator) | {"lab": False}
             self._advance()
-            return simulation_view(self.sim, self.running, self.generator) | {"lab": self.lab}
+            return simulation_view(self.sim, self.running, self.generator) | {"lab": True}
 
     def _require_lab(self) -> None:
         if not self.lab:

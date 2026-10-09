@@ -12,6 +12,7 @@ Defensa en profundidad, además de `ActuationPolicy`:
 """
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 
@@ -132,12 +133,10 @@ class CloudRunNodeGateway:
 
     # --- puerto ----------------------------------------------------------------
     async def list(self) -> dict[str, NodeState]:
-        out = {}
-        for region in REGIONS:
-            svc = await self._get_own(region)
-            if svc is not None:
-                out[region] = self._state(region, svc)
-        return out
+        # Las regiones en paralelo: el ciclo corre dentro de una petición, que se factura mientras dura.
+        found = await asyncio.gather(*(self._get_own(region) for region in REGIONS))
+        return {region: self._state(region, svc) for region, svc in zip(REGIONS, found, strict=True)
+                if svc is not None}
 
     async def create(self, region: str, min_instances: int, max_instances: int) -> str:
         body = {"labels": LABELS, "ingress": "INGRESS_TRAFFIC_ALL",
@@ -195,8 +194,8 @@ class CloudRunNodeGateway:
 
     async def list_agents(self) -> dict[str, AgentState]:
         out = {}
-        for region in REGIONS:
-            r = await self._request("GET", self._parent(region))
+        responses = await asyncio.gather(*(self._request("GET", self._parent(region)) for region in REGIONS))
+        for region, r in zip(REGIONS, responses, strict=True):
             self._ok(r)
             for svc in r.json().get("services", []):
                 labels = svc.get("labels") or {}

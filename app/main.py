@@ -1,6 +1,8 @@
 """Raíz de composición: el único lugar que conoce todas las capas y las conecta."""
 from __future__ import annotations
 
+from functools import cache
+
 from fastapi import FastAPI
 
 from .adapters.google_auth import verify_google_oidc
@@ -33,16 +35,22 @@ from .entrypoints.http.api import create_app
 from .seeds import seed
 
 
+@cache
+def vertex_client(settings: Settings) -> VertexClient:
+    """Un solo cliente, y un solo token, para el oráculo, el editor, los lectores y las topologías."""
+    return VertexClient(settings.project, settings.location, settings.model)
+
+
 def build_oracle(settings: Settings) -> OracleGateway:
     policy = AcceptancePolicy(settings.min_confidence, settings.min_sources)
     if settings.uses_vertex:
-        return VertexOracle(VertexClient(settings.project, settings.location, settings.model), policy)
+        return VertexOracle(vertex_client(settings), policy)
     return MockOracle(policy)
 
 
 def build_generator(settings: Settings) -> TopologyGenerator:
     if settings.uses_vertex:
-        return VertexTopologyGenerator(VertexClient(settings.project, settings.location, settings.model))
+        return VertexTopologyGenerator(vertex_client(settings))
     return MockTopologyGenerator()
 
 
@@ -86,7 +94,7 @@ def build_news(settings: Settings, service: MarketService) -> NewsService:
     simulado inventa titulares, y nunca deben aparecer junto a nombres de medios reales."""
     media = media_list.load(settings.media_file)
     if settings.uses_vertex:
-        client = VertexClient(settings.project, settings.location, settings.model)
+        client = vertex_client(settings)
         desk, reader = VertexNewsDesk(client), VertexNewsReader(client)
     else:
         desk, reader = MockNewsDesk(), MockNewsReader()

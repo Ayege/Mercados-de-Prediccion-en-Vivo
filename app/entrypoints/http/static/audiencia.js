@@ -4,6 +4,7 @@ let usuario = guardado("oraculo.usuario") || "";
 let token = guardado("oraculo.token") || "";
 let monto = Number(guardado("oraculo.monto")) || 50;
 const respondidos = new Set(JSON.parse(guardado("oraculo.censo") || "[]"));
+let sondeando = false;
 
 document.getElementById("ingreso").addEventListener("submit", async e => {
   e.preventDefault();
@@ -23,6 +24,15 @@ document.getElementById("ingreso").addEventListener("submit", async e => {
     aviso.textContent = err.message;
   }
 });
+
+// La sala vive en memoria: si el servidor se reinicia, el token deja de valer y hay que volver a entrar.
+function salir(motivo) {
+  token = guardado("oraculo.token", "");
+  document.getElementById("nombre").value = usuario;
+  document.getElementById("panel").hidden = true;
+  document.getElementById("ingreso").hidden = false;
+  document.getElementById("error-ingreso").textContent = motivo;
+}
 
 const conToken = (extra = {}) => ({ "X-User-Token": token, ...extra });
 
@@ -52,16 +62,25 @@ function controles(m) {
 }
 
 async function pintar() {
-  const [mercados, u] = await Promise.all([
-    api("/api/markets"), api(`/api/users/${encodeURIComponent(usuario)}`, { headers: conToken() }),
-  ]);
+  if (!token) return;
+  let mercados, u;
+  try {
+    [mercados, u] = await Promise.all([
+      api("/api/markets?resumen=true"),
+      api(`/api/users/${encodeURIComponent(usuario)}`, { headers: conToken() }),
+    ]);
+  } catch (err) {
+    if (err.status === 401) salir("La sala se reinició y tu sesión ya no vale: vuelve a entrar con el código de la pantalla.");
+    throw err;
+  }
   document.getElementById("quien").textContent = u.name;
   document.getElementById("saldo").textContent = u.balance.toFixed(0);
-  document.getElementById("lista").innerHTML = `
+  pintarSi(document.getElementById("lista"), `
     <div class="fila pequeno">Monto por orden:
       ${[10, 50, 100, 250].map(n =>
         `<button data-monto="${n}" ${n === monto ? "disabled" : ""}>${n}</button>`).join("")}
-    </div>` + ordenar(mercados).map(m => `
+    </div>` + (mercados.length ? "" : `<p class="tenue">Todavía no hay preguntas abiertas. Aparecerán aquí solas.</p>`)
+    + ordenar(mercados).map(m => `
     <article class="tarjeta">
       <span class="chip">${esc(tipo(m).etiqueta)}</span>
       ${titular(u.headlines?.[m.id], "Titular que te tocó: la sala ve dos titulares distintos y se revelan al final")}
@@ -72,23 +91,27 @@ async function pintar() {
         <span class="no">NO ${pct(m.prices.NO)}</span></p>
       ${controles(m)}
       ${posicion(u, m.id)}
-    </article>`).join("");
+    </article>`).join(""));
 }
 
 document.getElementById("lista").addEventListener("click", async e => {
   const b = e.target.closest("button");
-  if (!b) return;
+  if (!b || b.disabled) return;
   const error = document.getElementById("error");
-  error.textContent = "";
+  const hecho = document.getElementById("hecho");
+  error.textContent = hecho.textContent = "";
+  b.disabled = true;  // un doble toque no compra dos veces
   try {
     if (b.dataset.monto) {
       monto = Number(guardado("oraculo.monto", b.dataset.monto));
     } else if (b.dataset.operar) {
-      await api(`/api/markets/${b.dataset.id}/trade`, {
+      const r = await api(`/api/markets/${b.dataset.id}/trade`, {
         method: "POST",
         headers: conToken({ "Content-Type": "application/json" }),
         body: JSON.stringify({ user: usuario, outcome: b.dataset.operar, amount: monto }),
       });
+      hecho.textContent = `Compraste ${r.shares.toFixed(1)} acciones de ${RESULTADO[b.dataset.operar]} por ${monto}. ` +
+        `El SÍ quedó en ${pct(r.market.prices.YES)}.`;
     } else if (b.dataset.censo) {
       try {
         await api(`/api/markets/${b.dataset.id}/census`, {
@@ -102,9 +125,12 @@ document.getElementById("lista").addEventListener("click", async e => {
       }
     }
   } catch (err) {
+    if (err.status === 401) salir("La sala se reinició y tu sesión ya no vale: vuelve a entrar con el código de la pantalla.");
     error.textContent = err.message;
+  } finally {
+    b.disabled = false;
   }
-  pintar();
+  pintar().catch(() => {});
 });
 
 api("/api/info").then(i => {
@@ -117,7 +143,12 @@ function arrancar() {
   if (!usuario || !token) return;
   document.getElementById("ingreso").hidden = true;
   document.getElementById("panel").hidden = false;
-  pintar();
-  setInterval(() => pintar().catch(() => {}), 3000);
+  document.getElementById("error-ingreso").textContent = "";
+  if (sondeando) {
+    pintar().catch(() => {});
+    return;
+  }
+  sondeando = true;
+  sondear(pintar, 3000);
 }
 arrancar();

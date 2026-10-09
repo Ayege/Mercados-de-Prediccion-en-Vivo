@@ -17,9 +17,8 @@ import uuid
 from collections.abc import Callable
 
 from ..domain.errors import MarketError
-from ..domain.market import Market
 from ..domain.media import AGENTS, AgentRead, MediaList, NewsDraft, NewsPolicy, read_for, stake_for
-from .errors import Cooldown, NotFound
+from .errors import Cooldown, NotFound, require_market
 from .ports import NewsDesk, NewsReader, Repository
 from .service import MarketService
 from .views import draft_view, market_view
@@ -43,12 +42,6 @@ class NewsService:
         self.drafts: dict[str, NewsDraft] = {}
         self._drafts_lock = threading.Lock()  # abrir y descartar son «revisar y cambiar»
         self._last_search = -cooldown
-
-    def _market(self, market_id: str) -> Market:
-        m = self.repo.get_market(market_id)
-        if m is None:
-            raise NotFound("mercado no encontrado")
-        return m
 
     def view(self) -> dict:
         with self._drafts_lock:
@@ -102,7 +95,7 @@ class NewsService:
         que dos pedidos a la vez no hacen leer dos veces a los agentes.
         """
         with self.repo.transaction():
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             m.ensure_open()
             if m.news is None:
                 raise MarketError("esta pregunta no salió de las noticias: no hay cobertura que leer")
@@ -112,10 +105,10 @@ class NewsService:
             reads = await self._read_and_bet(market_id, question, criteria, coverage)
         except BaseException:
             with self.repo.transaction():
-                self._market(market_id).news.abort()  # type: ignore[union-attr]
+                require_market(self.repo, market_id).news.abort()  # type: ignore[union-attr]
             raise
         with self.repo.transaction():
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             m.news.finish(reads)  # type: ignore[union-attr]
             return market_view(m)
 
@@ -128,7 +121,7 @@ class NewsService:
         # Uno tras otro: cada agente ve el precio que dejó el anterior, como cualquier persona de la sala.
         for (agent, diet), e in zip(diets, estimates, strict=True):
             with self.repo.transaction():
-                m = self._market(market_id)
+                m = require_market(self.repo, market_id)
                 price, q, b = m.prices()["YES"], list(m.q), m.b
             outcome, stake = stake_for(e.p, q, b, self.agent_budget)
             read = AgentRead(agent, diet, read_for(diet, coverage), e.p, e.reasoning, price, outcome, stake)

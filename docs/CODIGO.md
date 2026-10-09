@@ -114,8 +114,8 @@ mismos controles que el pipeline), `make lock` (tras cambiar dependencias) y
     uvicorn app.main:app --port 8080
   ```
 
-  Abre `/nube.html`, activa la actuación y deja `/` abierta en otra pestaña para
-  generar demanda. `INFRA_MODE=plan` es el paso siguiente: habla con Cloud Run
+  Abre `/nube.html`, activa la actuación y deja `/` abierta en otra ventana, visible,
+  para generar demanda: las páginas dejan de consultar con la pestaña oculta. `INFRA_MODE=plan` es el paso siguiente: habla con Cloud Run
   de verdad, pero con `validateOnly`.
 - **Contenedor.**
 
@@ -240,7 +240,8 @@ escala a cero.
 **Los nodos olvidados son el único gasto que no se apaga solo.** La vigilia
 (`POST /api/infra/vigilia`, que Cloud Scheduler llama cada 15 min) los borra si
 nadie miró la proyección en `INFRA_TTL_SEGUNDOS`. Un proceso recién arrancado
-asume que nadie mira.
+asume que nadie mira, y una pestaña oculta tampoco cuenta: las páginas solo
+consultan mientras están visibles, sin solapar consultas.
 
 **Tres defensas antes de la nube.** `TopologyPolicy` (¿es un buen diseño?),
 `ActuationPolicy` (¿se puede ejecutar en esta cuenta?) y el adaptador, que solo

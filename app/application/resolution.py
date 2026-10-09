@@ -15,7 +15,7 @@ from ..domain.errors import MarketError
 from ..domain.framing import FramingPolicy
 from ..domain.market import Market
 from ..domain.verdict import CensusPolicy, Verdict
-from .errors import Cooldown, NotFound
+from .errors import Cooldown, require_market
 from .ports import FAULTS, FRAMING_FAULTS, OracleGateway, OracleQuery, Repository, SimulationJudge
 from .views import market_view
 
@@ -31,12 +31,6 @@ class Resolver:
         self.framing = framing or FramingPolicy()
         self.cooldown = cooldown
         self.clock = clock
-
-    def _market(self, market_id: str) -> Market:
-        m = self.repo.get_market(market_id)
-        if m is None:
-            raise NotFound("mercado no encontrado")
-        return m
 
     async def _consult(self, m: Market, fault: str | None) -> Verdict:
         """Primero una lectura neutral. Si es decisiva y hay titulares, dos lecturas más.
@@ -54,7 +48,7 @@ class Resolver:
         if fault is not None and fault not in FAULTS and fault not in FRAMING_FAULTS:
             raise MarketError(f"fallo desconocido: {fault}")
         with self.repo.transaction():
-            m = self._market(market_id)
+            m = require_market(self.repo, market_id)
             m.ensure_open()
             if fault in FRAMING_FAULTS and m.framing is None:
                 raise MarketError("ese fallo solo aplica a preguntas con titulares")

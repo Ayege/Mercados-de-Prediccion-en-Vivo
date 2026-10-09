@@ -96,6 +96,13 @@ def market_view(m: Market) -> dict:
     }
 
 
+def market_summary(m: Market) -> dict:
+    """Lo que pinta un móvil. Sin historial ni trazas: cada móvil lo pide cada pocos segundos."""
+    return {"id": m.id, "question": m.question, "criteria": m.criteria, "kind": m.kind,
+            "resolver": m.resolver, "topic": m.news.topic if m.news else None, "prices": m.prices(),
+            "status": m.status, "outcome": m.outcome}
+
+
 def account_view(a: Account) -> dict:
     return {
         "name": a.name,
@@ -117,6 +124,25 @@ def _score(s) -> dict | None:
             "replicas": s.replicas, "regions": s.regions, "value": s.value}
 
 
+def topology_view(sim: Simulation, running: bool, generator) -> dict:
+    """Lo único que se ve sin laboratorio: la topología adoptada y las propuestas."""
+    current = sim.policy.check({"replicas": sim.topology})
+    return {
+        "running": running,
+        "tick": sim.tick_n,
+        "seed": sim.seed,
+        "generator": {"name": generator.name, "model": generator.model},
+        "topology": {"replicas": sim.topology, "score": _score(current.score),
+                     "compliant": current.accepted, "violations": current.trace},
+        "proposals": [
+            {"id": p.id, "source": p.source, "model": p.model, "tick": p.tick,
+             "accepted": p.decision.accepted, "adopted": p.adopted, "replicas": p.decision.replicas,
+             "score": _score(p.decision.score), "trace": p.trace, "reasoning": p.reasoning}
+            for p in sim.proposals[-6:]
+        ][::-1],
+    }
+
+
 def simulation_view(sim: Simulation, running: bool, generator) -> dict:
     series = sim.series
     errors = sim.errors
@@ -124,14 +150,9 @@ def simulation_view(sim: Simulation, running: bool, generator) -> dict:
     if errors:
         mape = sum(abs(r - p) / r for r, p, _ in errors) / len(errors)
         naive = sum(abs(r - n) / r for r, _, n in errors) / len(errors)
-    current = sim.policy.check({"replicas": sim.topology})
     faults = {f.id: f for f in sim.faults}
-    return {
-        "running": running,
-        "tick": sim.tick_n,
+    return topology_view(sim, running, generator) | {
         "generation": sim.generation,
-        "seed": sim.seed,
-        "generator": {"name": generator.name, "model": generator.model},
         "series": {
             "tick": list(series.tick),
             "demand": {r: [_r(x) for x in v] for r, v in series.demand.items()},
@@ -184,14 +205,6 @@ def simulation_view(sim: Simulation, running: bool, generator) -> dict:
         "credulity": {"start": round(sim.initial_credulity, 3), "now": round(sim.mean_credulity(), 3),
                       "news_hit_rate": (round(sum(n.true for n in sim.news) / len(sim.news), 2)
                                         if sim.news else None)},
-        "topology": {"replicas": sim.topology, "score": _score(current.score),
-                     "compliant": current.accepted, "violations": current.trace},
-        "proposals": [
-            {"id": p.id, "source": p.source, "model": p.model, "tick": p.tick,
-             "accepted": p.decision.accepted, "adopted": p.adopted, "replicas": p.decision.replicas,
-             "score": _score(p.decision.score), "trace": p.trace, "reasoning": p.reasoning}
-            for p in sim.proposals[-6:]
-        ][::-1],
         "predicates": PREDICATES,
         "fault_kinds": SIM_FAULTS,
     }

@@ -16,8 +16,8 @@ proyecto `oraculo-6d1578`.
 
 | Recurso | Cuándo cobra | Cómo se contiene |
 | --- | --- | --- |
-| API `oraculo-api` | Solo mientras atiende peticiones | Facturación por petición (`--cpu-throttling`) y escala a cero |
-| Bucle de infraestructura | Nunca por sí solo | Corre dentro de las consultas de `/nube.html`, cada 10 s, solo mientras alguien mira |
+| API `oraculo-api` | Solo mientras atiende peticiones | Facturación por petición (`--cpu-throttling`) y escala a cero. Las páginas solo consultan con la pestaña visible, y los móviles piden un resumen sin historial (`/api/markets?resumen=true`) |
+| Bucle de infraestructura | Nunca por sí solo | Corre dentro de las consultas de `/nube.html`, cada 10 s, solo mientras alguien la tiene visible |
 | Nodos `oraculo-nodo-*` | Las instancias mínimas cobran aunque nadie las use | ¼ vCPU y 256 MiB; 2 instancias mínimas en total como máximo |
 | Agentes `oraculo-agente-*` | Las peticiones que atienden, y la instancia mínima si su gen `warm` está activo | Como mucho 1 agente caliente (0,45 centavos/hora) y 12 peticiones por ciclo (≈ 1 µUSD cada una) |
 | Nodos y agentes olvidados | Si la API duerme, siguen ahí | La vigilia los borra a los 30 min sin nadie mirando |
