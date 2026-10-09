@@ -122,7 +122,7 @@ def test_unknown_market_is_404(client):
 
 def test_seeded_app_serves_markets_and_health():
     c = app_with(with_seed=True)
-    assert len(c.get("/api/markets").json()) == 3
+    assert len(c.get("/api/markets").json()) == 4
     assert c.get("/healthz").json() == {"ok": True}
 
 
@@ -210,19 +210,19 @@ def test_presenter_key_guards_create_and_resolve(monkeypatch):
     assert trade(c, mid, "aye", "YES", 10).status_code in (200, 400)
 
 
-@pytest.mark.parametrize("seed_set", ["oraculo", "agregacion", "mixta"])
-def test_every_seed_set_opens_at_even_odds(seed_set, monkeypatch):
+@pytest.mark.parametrize("seed_set,count", [("oraculo", 4), ("agregacion", 3), ("mixta", 3)])
+def test_every_seed_set_opens_at_even_odds(seed_set, count, monkeypatch):
     monkeypatch.setenv("SEED_SET", seed_set)
     c = app_with(with_seed=True)
     markets = c.get("/api/markets").json()
-    assert len(markets) == 3
+    assert len(markets) == count
     assert all(m["prices"]["YES"] == 0.5 for m in markets)
 
 
 def test_oracle_seed_set_has_one_unresolvable_question(monkeypatch):
     monkeypatch.setenv("SEED_SET", "oraculo")
     c = app_with(with_seed=True)
-    assert sorted(m["kind"] for m in c.get("/api/markets").json()) == ["futuro", "presente", "presente"]
+    assert sorted(m["kind"] for m in c.get("/api/markets").json()) == ["futuro", "presente", "presente", "presente"]
 
 
 # --- nube simulada ---------------------------------------------------------------

@@ -50,8 +50,8 @@ un titular que no publicó.
 
 ```bash
 curl -X POST $URL/api/markets -H "X-Presenter-Key: $PRESENTER_KEY" -H 'Content-Type: application/json' -d '{
-  "question": "¿Se publicó Python 3.15.0 (versión final) antes del 15 de octubre de 2026?",
-  "criteria": "SÍ si python.org muestra la release 3.15.0 final con fecha igual o anterior al 15/10/2026.",
+  "question": "¿Se publicó Python 3.15.0 (versión final) antes del 8 de octubre de 2026?",
+  "criteria": "SÍ si python.org muestra la release 3.15.0 final con fecha igual o anterior al 07/10/2026.",
   "framing": {
     "pro_si": {"text": "…", "source": "Medio A", "url": "https://…"},
     "pro_no": {"text": "…", "source": "Medio B", "url": "https://…"}

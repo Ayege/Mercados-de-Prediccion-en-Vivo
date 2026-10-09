@@ -17,7 +17,7 @@ proyecto `oraculo-6d1578`.
 | Recurso | Cuándo cobra | Cómo se contiene |
 | --- | --- | --- |
 | API `oraculo-api` | Solo mientras atiende peticiones | Facturación por petición (`--cpu-throttling`) y escala a cero. Las páginas solo consultan con la pestaña visible, y los móviles piden un resumen sin historial (`/api/markets?resumen=true`) |
-| Bucle de infraestructura | Nunca por sí solo | Corre dentro de las consultas de `/nube.html`, cada 10 s, solo mientras alguien la tiene visible |
+| Bucle de infraestructura | Nunca por sí solo | Corre dentro de las consultas del ponente (`/nube.html` o `/proyeccion.html` con la clave), cada 10 s, solo mientras alguna está visible |
 | Nodos `oraculo-nodo-*` | Las instancias mínimas cobran aunque nadie las use | ¼ vCPU y 256 MiB; 2 instancias mínimas en total como máximo |
 | Agentes `oraculo-agente-*` | Las peticiones que atienden, y la instancia mínima si su gen `warm` está activo | Como mucho 1 agente caliente (0,45 centavos/hora) y 12 peticiones por ciclo (≈ 1 µUSD cada una) |
 | Nodos y agentes olvidados | Si la API duerme, siguen ahí | La vigilia los borra a los 30 min sin nadie mirando |
@@ -160,7 +160,7 @@ gcloud run deploy oraculo-api --image $IMAGE --region $REGION --service-account 
   --concurrency 250 --cpu 1 --memory 512Mi \
   --set-secrets PRESENTER_KEY=oraculo-presenter-key:latest \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,ORACLE_BACKEND=vertex,VERTEX_LOCATION=global,\
-SEED_SET=ninguna,INFRA_MODE=real,NODO_IMAGEN=$IMAGE,NODO_CUENTA=$NODO"
+SEED_SET=real,INFRA_MODE=real,NODO_IMAGEN=$IMAGE,NODO_CUENTA=$NODO"
 gcloud run services add-iam-policy-binding oraculo-api --region $REGION \
   --member="serviceAccount:$BUILD" --role=roles/run.developer
 
@@ -179,7 +179,7 @@ gcloud scheduler jobs create http oraculo-vigilia --location=$REGION --schedule=
   caracteres o sin código de sala, y cierra `/api/docs`.
 - **En Cloud Run todo es real**, y la API se niega a arrancar si algo no lo es:
   exige `ORACLE_BACKEND=vertex` con proyecto (oráculo, editor y agentes de
-  noticias con Gemini), `INFRA_MODE=real` y solo preguntas reales (por defecto, `SEED_SET=ninguna`). El
+  noticias con Gemini), `INFRA_MODE=real` y solo preguntas reales (por defecto, `SEED_SET=real`). El
   laboratorio simulado de `/nube.html` queda apagado.
 - El código de sala (`SALA_CODIGO`) se genera solo al arrancar cada revisión y
   aparece en la proyección de quien modera. Para fijarlo, pon un valor propio.
@@ -200,7 +200,7 @@ gcloud builds submit --config cloudbuild.yaml --region $REGION --project $PROJEC
 
 Pasa `--project` siempre: si gcloud tiene otro proyecto configurado por defecto,
 el build se iría a ese. Cada publicación fija también `SEED_SET` (por defecto,
-`ninguna`: la sala empieza vacía); para otro juego, añade `--substitutions=_SEED_SET=real`.
+`real`); para empezar con la sala vacía, añade `--substitutions=_SEED_SET=ninguna`.
 
 Las imágenes del pipeline van fijadas por digest y las dependencias de Python por
 hash. Para actualizarlas:
@@ -242,7 +242,7 @@ cambia el código de sala. Los juegos están en
 
 ```bash
 gcloud storage rm gs://$PROJECT_ID-estado/estado/sala.bin
-gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=ninguna
+gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=real
 ```
 
 ## Comprobar

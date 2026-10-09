@@ -10,7 +10,7 @@ Cada mercado declara su tipo, porque el tipo cambia lo que mide el precio:
 
 | Tipo | Ejemplo | Qué mide el precio | Quién lo resuelve |
 | --- | --- | --- | --- |
-| `presente` | ¿Salió Python 3.15.0 antes del 15/10/2026? | La respuesta ya existe, pero nadie en la sala la sabe con certeza. El precio agrega conocimiento disperso **sobre el presente** | El oráculo, con evidencia |
+| `presente` | ¿Salió Python 3.15.0 antes del 8/10/2026? | La respuesta ya existe, pero nadie en la sala la sabe con certeza. El precio agrega conocimiento disperso **sobre el presente** | El oráculo, con evidencia |
 | `futuro` | ¿Cerrará el USD/DOP sobre 65 el 31/12/2026? | Hoy no se puede resolver, a propósito: lo correcto es que el oráculo diga **SIN RESOLVER** | El oráculo, que debe negarse |
 | `sala` | ¿Más de la mitad de esta sala desplegó un viernes este mes? | Cada persona conoce una parte y ningún buscador la tiene. Aquí el mecanismo de agregación se luce | Un censo privado de la sala |
 | `simulacion` | ¿La primera caída de nodo se reparará en menos de 6 ticks? | Comportamiento emergente de los agentes, con plazo de minutos | El código de la simulación |
@@ -44,9 +44,9 @@ noticias no se siembran: se crean en vivo desde la proyección.
 
 | `SEED_SET` | Preguntas |
 | --- | --- |
-| `ninguna` | Ninguna: la sala empieza vacía y las preguntas se crean desde las noticias. **El que usa producción** |
-| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala`, la autorreparación de un nodo real y la cooperación del mercado real (4 agentes). Junto con `ninguna`, el único que acepta producción |
-| `oraculo` (default) | Kubernetes, Python (`presente`) y USD/DOP (`futuro`) |
+| `ninguna` | Ninguna: la sala empieza vacía y las preguntas se crean desde las noticias |
+| `real` | Kubernetes, Python, iPhone 18, USD/DOP, una pregunta `sala`, la autorreparación de un nodo real y la cooperación del mercado real (4 agentes). Junto con `ninguna`, el único que acepta producción. **El que usa producción** |
+| `oraculo` (default) | Kubernetes, Python, iPhone 18 (`presente`, con la fecha límite ya pasada) y USD/DOP (`futuro`) |
 | `agregacion` | Tres preguntas `sala` sobre la práctica de quienes participan |
 | `mixta` | Python, USD/DOP y una pregunta `sala` |
 | `encuadre` | Python y Kubernetes con dos titulares cada una, más una `sala` de control |

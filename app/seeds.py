@@ -8,15 +8,23 @@ from __future__ import annotations
 from .application.service import MarketService
 from .domain.framing import Framing, Headline
 
+# Las `presente` tienen su fecha límite en el pasado: la respuesta ya existe y la IA debe
+# encontrarla con fuentes. Si la fecha todavía no llega, la pregunta es `futuro`.
 KUBERNETES = (
-    "¿Se publicó Kubernetes v1.36 antes del 30 de septiembre de 2026?",
-    "SÍ si existe una release estable v1.36.0 en github.com/kubernetes/kubernetes "
+    "¿Se publicó Kubernetes v1.37 antes del 1 de octubre de 2026?",
+    "SÍ si existe una release estable v1.37.0 en github.com/kubernetes/kubernetes "
     "con fecha igual o anterior al 30/09/2026.",
     "presente",
 )
 PYTHON = (
-    "¿Se publicó Python 3.15.0 (versión final) antes del 15 de octubre de 2026?",
-    "SÍ si python.org muestra la release 3.15.0 final con fecha igual o anterior al 15/10/2026.",
+    "¿Se publicó Python 3.15.0 (versión final) antes del 8 de octubre de 2026?",
+    "SÍ si python.org muestra la release 3.15.0 final con fecha igual o anterior al 07/10/2026.",
+    "presente",
+)
+IPHONE = (
+    "¿Presentó Apple el iPhone 18 (el modelo base, sin «Pro» ni «Air») antes del 1 de octubre de 2026?",
+    "SÍ si apple.com/newsroom anunció un teléfono llamado exactamente «iPhone 18» con fecha igual o "
+    "anterior al 30/09/2026. Los modelos Pro, Pro Max, Air o «e» no cuentan.",
     "presente",
 )
 DOLAR = (
@@ -101,7 +109,7 @@ SEEDS = {
     # Ninguna: la sala empieza vacía y el ponente crea las preguntas desde las noticias.
     "ninguna": [],
     # Creencia contra evidencia, y el sistema negándose a responder.
-    "oraculo": [KUBERNETES, PYTHON, DOLAR],
+    "oraculo": [KUBERNETES, PYTHON, IPHONE, DOLAR],
     # El mecanismo de agregación: información dispersa que ningún buscador tiene.
     "agregacion": [VIERNES, LLM, ROLLBACK],
     # Un ejemplo de cada tipo.
@@ -112,7 +120,7 @@ SEEDS = {
     "nube_real": [COOPERACION, TOPOLOGIA, AUTORREPARACION_REAL, COOPERACION_REAL, CREDULIDAD],
     # Solo lo real: el oráculo con evidencia, el censo de la sala, un nodo real de Cloud Run y
     # el mercado real de agentes. Es el único juego que acepta producción.
-    "real": [KUBERNETES, PYTHON, DOLAR, VIERNES, AUTORREPARACION_REAL, COOPERACION_REAL],
+    "real": [KUBERNETES, PYTHON, IPHONE, DOLAR, VIERNES, AUTORREPARACION_REAL, COOPERACION_REAL],
     # Encuadre: dos titulares, la sala dividida al azar, y el oráculo puesto a prueba con ambos.
     # La pregunta de la sala no lleva titular: es el grupo de control del mecanismo.
     "encuadre": [PYTHON_ENCUADRADO, KUBERNETES_ENCUADRADO, VIERNES],
