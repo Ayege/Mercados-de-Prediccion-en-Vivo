@@ -42,6 +42,13 @@
     padding: .6rem .8rem; }
   .cifras-nube strong { display: block; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
   #nube-agentes table { font-size: 1rem; }
+  #nube h3 { margin: 1.2rem 0 .3rem; font-size: 1.1rem; }
+  .flujo { list-style: none; padding: 0; margin: .6rem 0; display: grid; gap: .5rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+  .flujo li { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: .6rem .8rem;
+    position: relative; }
+  .flujo li strong { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .flujo li .pequeno { display: block; }
 </style>
 </head>
 <body>
@@ -73,17 +80,28 @@
   </section>
   <div id="lista"></div>
   <section id="nube" hidden>
-    <h2>La nube negocia sus recursos <span class="chip" id="nube-modo"></span></h2>
-    <p class="tenue">Cuatro agentes, cada uno con su propio servicio de Cloud Run en una región distinta, compiten por
-      atender el tráfico de sus móviles. Cada 10 s hay una subasta: venden los que piden menos. Solo cobran lo que
-      atienden a tiempo y pagan lo que de verdad cuesta Cloud Run. Cada 12 subastas, la evolución copia a los que
-      más ganaron.</p>
+    <h2>La nube negocia sus recursos con su tráfico <span class="chip" id="nube-modo"></span></h2>
+    <p class="tenue">Cada vez que su móvil consulta la sala, eso es tráfico real. Cada 10 s la nube lo mide, predice
+      el de los próximos segundos y decide cuántas máquinas tener encendidas <em>antes</em> de que llegue. Después,
+      cuatro agentes se disputan ese mismo tráfico en una subasta.</p>
     <p class="aviso" id="nube-pista"></p>
-    <div class="cifras-nube" id="nube-cifras"></div>
-    <div class="tabla" id="nube-agentes"></div>
+    <h3>1. Del tráfico a las máquinas</h3>
+    <ol class="flujo" id="nube-flujo"></ol>
+    <p class="pequeno tenue" style="margin-bottom:0">Peticiones por segundo: el tráfico real de la sala y lo que la nube
+      predijo un ciclo antes.</p>
+    <div id="nube-grafico" style="max-width:60rem;padding:0 4.5rem 0 2.5rem"></div>
+    <p class="pequeno tenue" id="nube-decision"></p>
+    <div id="nube-mercado">
+      <h3>2. Quién atiende ese tráfico: la subasta</h3>
+      <p class="tenue">Cada agente tiene su propio servicio de Cloud Run en una región distinta. Cada 10 s se subasta
+        el tráfico del ciclo: venden los que piden menos. Solo cobran lo que atienden a tiempo y pagan lo que de verdad
+        cuesta Cloud Run. Cada 12 subastas, la evolución copia a los que más ganaron.</p>
+      <div class="cifras-nube" id="nube-cifras"></div>
+      <div class="tabla" id="nube-agentes"></div>
     <div class="rejilla compacta" style="margin-top:.8rem">
       <div><strong class="pequeno">Últimas subastas</strong><ul class="intentos" id="nube-subastas"></ul></div>
       <div><strong class="pequeno">Coaliciones y evolución</strong><ul class="intentos" id="nube-evolucion"></ul></div>
+    </div>
     </div>
     <div class="fila" id="nube-controles" hidden>
       <button data-nube="actuar"></button>
@@ -101,6 +119,7 @@
 </main>
 
 <script src="comun.js"></script>
+<script src="graficos.js"></script>
 <script src="proyeccion.js"></script>
 </body>
 </html>

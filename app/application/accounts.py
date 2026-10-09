@@ -15,7 +15,7 @@ from ..domain.market import Account
 from .errors import Conflict, RateLimited, Unauthorized
 from .limits import SlidingWindow
 from .ports import Repository
-from .views import account_view, headline_view
+from .views import account_view, article_view, headline_view
 
 ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O ni 1/I: se dicta en voz alta
 
@@ -52,13 +52,17 @@ class Accounts:
             raise RateLimited("demasiadas órdenes seguidas: espera unos segundos")
 
     def view(self, name: str, token: str) -> dict:
-        """La cuenta y, por cada pregunta con titulares, el único titular que esta persona ve.
-        Solo lee: el grupo se asignó al entrar o al crear la pregunta."""
+        """La cuenta y, por cada pregunta con titulares, lo único que esta persona ve: su titular
+        del encuadre o los titulares de su lado de los medios. Solo lee: el grupo se asignó al
+        entrar o al crear la pregunta."""
         with self.repo.transaction():
             acc = self.authenticate(name, token)
-            headlines = {m.id: headline_view(m.headline_for(acc.name))
-                         for m in self.repo.markets() if m.framing and m.status == "open"}
-            return account_view(acc) | {"headlines": headlines}
+            open_ = [m for m in self.repo.markets() if m.status == "open"]
+            headlines = {m.id: headline_view(m.headline_for(acc.name)) for m in open_ if m.framing}
+            diets = {m.id: {"side": m.news.side_for(acc.name),
+                            "articles": [article_view(a) for a in m.news.articles_for(acc.name)]}
+                     for m in open_ if m.news}
+            return account_view(acc) | {"headlines": headlines, "diets": diets}
 
     def enter(self, name: str, code: str = "") -> dict:
         """Reserva un nombre y entrega su token. El token se muestra una sola vez."""

@@ -65,23 +65,32 @@ class Framing:
 
 @dataclass
 class Exposure:
-    """Quién vio qué titular y cuánto apostó cada grupo. Nunca sale por persona."""
+    """Quién vio qué y cuánto apostó cada grupo. Nunca sale por persona.
 
+    Dos grupos: los dos titulares de un encuadre, o la dieta de medios (izquierda o
+    derecha) en una pregunta que nació de las noticias."""
+
+    names: tuple[str, str] = ARMS
     arms: dict[str, str] = field(default_factory=dict)  # persona → grupo
-    spend: dict[str, dict[str, float]] = field(
-        default_factory=lambda: {a: {"YES": 0.0, "NO": 0.0} for a in ARMS})
-    traders: dict[str, set[str]] = field(default_factory=lambda: {a: set() for a in ARMS})
+    spend: dict[str, dict[str, float]] = field(default_factory=dict)
+    traders: dict[str, set[str]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for a in self.names:
+            self.spend.setdefault(a, {"YES": 0.0, "NO": 0.0})
+            self.traders.setdefault(a, set())
 
     def assign(self, who: str, market_id: str) -> str:
         """Aleatorización en bloques: los grupos nunca se separan por más de una persona."""
         if who in self.arms:
             return self.arms[who]
-        sizes = {a: sum(1 for x in self.arms.values() if x == a) for a in ARMS}
-        if sizes["pro_si"] != sizes["pro_no"]:
-            arm = min(ARMS, key=lambda a: sizes[a])
+        first, second = self.names
+        sizes = {a: sum(1 for x in self.arms.values() if x == a) for a in self.names}
+        if sizes[first] != sizes[second]:
+            arm = min(self.names, key=lambda a: sizes[a])
         else:
             digest = hashlib.sha256(f"{market_id}:{who}".encode()).digest()
-            arm = ARMS[digest[0] % 2]
+            arm = self.names[digest[0] % 2]
         self.arms[who] = arm
         return arm
 
@@ -93,7 +102,7 @@ class Exposure:
     def summary(self) -> dict:
         """Por grupo: a cuántos les tocó, cuántos apostaron y qué parte del dinero fue al SÍ."""
         out = {}
-        for a in ARMS:
+        for a in self.names:
             total = self.spend[a]["YES"] + self.spend[a]["NO"]
             out[a] = {
                 "assigned": sum(1 for x in self.arms.values() if x == a),

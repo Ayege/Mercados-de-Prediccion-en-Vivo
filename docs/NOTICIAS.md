@@ -10,8 +10,8 @@ piezas, de la más real a la más simulada:
 2. [El oráculo, puesto a prueba con los titulares](#2-el-oráculo-puesto-a-prueba-con-los-titulares):
    el veredicto no puede depender de la redacción.
 3. [Agentes con dieta de medios](#3-agentes-con-dieta-de-medios): preguntas que
-   nacen de las noticias del día y cuatro agentes que leen solo izquierda, solo
-   derecha, ambas o ninguna.
+   nacen de las noticias del día; la sala se divide al azar entre izquierda y
+   derecha, y cuatro agentes leen solo izquierda, solo derecha, ambas o ninguna.
 4. [Credulidad en el laboratorio](#4-credulidad-en-el-laboratorio-simulado):
    agentes simulados que creen o no noticias alarmistas.
 
@@ -94,15 +94,25 @@ el ponente escribe un tema en «Pregunta desde las noticias».
 3. **`NewsPolicy` decide si el borrador sirve.** Pide una pregunta de sí o no,
    un criterio, un tipo y al menos un titular de cada lado. Si falta algo, el
    borrador queda rechazado con su traza y se busca otra vez.
-4. **El ponente abre la pregunta.** La sala apuesta como en cualquier otra.
+4. **El ponente abre la pregunta, y la sala recibe su dieta.** Cada persona cae
+   al azar en el grupo de izquierda o en el de derecha, con la misma
+   aleatorización en bloques del encuadre. Quien ya estaba en la sala recibe su
+   grupo al abrirse la pregunta, y quien entra después, al entrar. En su móvil
+   solo ve los titulares de su lado, sin la etiqueta «izquierda» o «derecha»: lo
+   que se prueba es el titular, no la etiqueta. La proyección muestra por grupo
+   cuántas personas hay, cuántas apostaron y qué parte de lo apostado fue al SÍ,
+   junto a lo que creyó el bot que lee lo mismo. Los titulares, y lo que leyó y
+   razonó cada bot, quedan **ocultos** hasta «Revelar titulares» o hasta
+   resolver, porque la proyección la ve toda la sala. En el borrador, el ponente
+   los ve plegados.
 5. **«Que apuesten los bots».** Cuatro agentes Gemini leen la misma cobertura,
    cada uno solo lo que su dieta permite: solo izquierda, solo derecha, ambas o
    ninguna. No buscan en internet. Los titulares les llegan escapados, como dato,
    para que uno que diga «</titular>» no pueda salirse de su etiqueta. Cada uno
-   estima P(SÍ) y compra hasta llevar el
-   precio a su creencia, con un tope de 200 créditos (`AGENTES_PRESUPUESTO`). La
-   proyección muestra qué leyó cada uno, qué creyó, contra qué precio y cuánto
-   apostó.
+   estima la probabilidad del SÍ y compra hasta llevar la probabilidad de la sala
+   a su creencia, con un tope de 200 créditos (`AGENTES_PRESUPUESTO`). La
+   proyección muestra qué leyó cada uno, qué creyó, cuál era la probabilidad de la
+   sala en ese momento y cuánto apostó.
    Mientras leen, la pregunta queda marcada «leyendo» en el propio mercado: un
    segundo pedido no los hace leer dos veces.
 6. **Al resolver**, la misma tarjeta dice qué dieta ganó dinero y cuál perdió.
@@ -115,8 +125,8 @@ el ponente escribe un tema en «Pregunta desde las noticias».
 ### Lo que enseña, y lo que no
 
 - **Enseña** que, con los mismos hechos disponibles, la dieta de medios puede
-  separar creencias, y que quien apuesta mueve el precio que ve la sala.
-- **Los agentes apuestan en orden**, así que el último fija el precio. La
+  separar creencias, y que quien apuesta mueve la probabilidad que ve la sala.
+- **Los agentes apuestan en orden**, así que el último fija la probabilidad. La
   pantalla lo dice.
 - **Un LLM no es una hoja en blanco.** En la primera prueba real (inmigración,
   octubre de 2026) las cuatro dietas creyeron entre 80 y 88 %: el agente que no

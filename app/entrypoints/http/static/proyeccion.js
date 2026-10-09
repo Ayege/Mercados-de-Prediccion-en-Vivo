@@ -58,9 +58,43 @@ function encuadre(m) {
     <ul class="intentos">${fila("pro_si")}${fila("pro_no")}</ul>${lectura}${titulares}</div>`;
 }
 
+// La sala con dieta de medios: cada mitad lee un lado, y se compara con el bot que lee lo mismo.
+const LADOS = { izquierda: "solo medios de izquierda", derecha: "solo medios de derecha" };
+
+function dieta(m) {
+  const d = m.diet;
+  if (!d) return "";
+  const g = d.groups;
+  const bot = lado => m.agents.find(a => a.diet === lado);
+  const fila = lado => {
+    const x = g[lado], b = bot(lado);
+    const gente = x.yes_share == null ? "todavía sin apuestas" : `<strong>${pct(x.yes_share)}</strong> de lo apostado al SÍ`;
+    const ia = !b ? "" : b.p == null ? " · su bot no pudo leer" : ` · su bot cree <strong>${pct(b.p)}</strong> SÍ`;
+    return `<li><strong>${LADOS[lado]}</strong>: ${x.assigned} persona(s), ${x.traders} apostaron · ${gente}${ia}</li>`;
+  };
+  let lectura = "";
+  if (g.izquierda.yes_share != null && g.derecha.yes_share != null) {
+    const dg = Math.round((g.izquierda.yes_share - g.derecha.yes_share) * 100);
+    const bi = bot("izquierda"), bd = bot("derecha");
+    const db = bi?.p != null && bd?.p != null ? Math.round((bi.p - bd.p) * 100) : null;
+    const gente = dg === 0 ? "Las dos mitades de la sala apostaron igual: la dieta no movió a esta sala."
+      : `La mitad que leyó izquierda puso <strong>${Math.abs(dg)} puntos ${dg > 0 ? "más" : "menos"}</strong> al SÍ que la que leyó derecha.`;
+    const ia = db == null ? "" : db === 0 ? " Los bots de cada lado creyeron lo mismo."
+      : dg === 0 ? ` Entre los bots, la diferencia fue de <strong>${Math.abs(db)} puntos</strong>.`
+      : ` Entre los bots, la diferencia fue de <strong>${Math.abs(db)} puntos</strong> ${(db > 0) === (dg > 0) ? "en el mismo sentido" : "en sentido contrario"}.`;
+    lectura = `<p class="pequeno">${gente}${ia} El reparto fue al azar, así que en esta sala la diferencia la
+      causó lo que leyó cada mitad. Con pocas personas puede ser ruido.</p>`;
+  }
+  const oculto = d.revealed ? "" : `<p class="pequeno tenue">Los titulares siguen ocultos: cada mitad los está
+    leyendo en su móvil (${m.coverage_count.izquierda} de izquierda, ${m.coverage_count.derecha} de derecha).</p>`;
+  return `<div class="encuadre"><p class="pequeno"><strong>Dieta de medios de la sala</strong> · la sala está
+    dividida al azar: una mitad ve en su móvil solo los titulares de izquierda y la otra, solo los de derecha.</p>
+    <ul class="intentos">${fila("izquierda")}${fila("derecha")}</ul>${lectura}${oculto}</div>`;
+}
+
 // Qué leyó, creyó y apostó cada agente según su dieta de medios.
 function agentes(m) {
-  if (!m.coverage.length) return "";
+  if (!m.topic) return "";
   const titulo = `<p class="pequeno"><strong>Cuatro bots también apuestan.</strong> Cada uno solo lee ciertos
     medios: uno de izquierda, uno de derecha, uno ambos y uno ninguno. ¿Cambia su apuesta según lo que lee?</p>`;
   if (!m.agents.length) {
@@ -71,7 +105,7 @@ function agentes(m) {
   }
   const bloques = m.agents.map(a => {
     const barra = a.p == null ? `<p class="pequeno tenue">No pudo leer: no apostó.</p>` : `
-      <div class="creencia" role="img" aria-label="Creyó ${pct(a.p)}; el precio estaba en ${pct(a.price_before)}">
+      <div class="creencia" role="img" aria-label="Creyó ${pct(a.p)}; la sala estaba en ${pct(a.price_before)}">
         <span class="sala" style="left:calc(${a.price_before * 100}% - 2px)"></span>
         <span class="agente" style="left:calc(${a.p * 100}% - 2px)"></span></div>`;
     const apuesta = a.outcome
@@ -80,13 +114,14 @@ function agentes(m) {
     const pnl = a.pnl == null ? ""
       : ` · <strong class="${a.pnl >= 0 ? "si" : "no"}">${a.pnl >= 0 ? "ganó" : "perdió"} ${Math.abs(a.pnl).toFixed(0)}</strong>`;
     return `<div class="agente-fila">
-      <p class="pequeno" style="margin:0">Bot que lee <strong>${esc(DIETAS[a.diet])}</strong> (${a.read.length} titular(es)):
+      <p class="pequeno" style="margin:0">Bot que lee <strong>${esc(DIETAS[a.diet])}</strong> (${a.read_count} titular(es)):
         cree <strong>${a.p == null ? "—" : pct(a.p)}</strong> SÍ · ${apuesta}${pnl}</p>
       ${barra}
-      <p class="pequeno tenue" style="margin:0">${esc(a.reasoning)}</p></div>`;
+      ${a.reasoning ? `<p class="pequeno tenue" style="margin:0">${esc(a.reasoning)}</p>` : ""}</div>`;
   }).join("");
   return `<div class="agentes">${titulo}${bloques}
-    <p class="pequeno tenue">Gris: lo que creía la sala cuando apostó el bot. Azul: lo que creyó el bot.</p></div>`;
+    <p class="pequeno tenue">Gris: lo que creía la sala cuando apostó el bot. Azul: lo que creyó el bot.
+      ${m.diet && !m.diet.revealed ? "Lo que leyó y por qué lo creyó se muestra al revelar los titulares." : ""}</p></div>`;
 }
 
 // Cómo leyó el modelo la misma pregunta con cada titular.
@@ -141,8 +176,9 @@ function ponente(m) {
       <button data-resolver="${m.id}" ${espera ? "disabled" : ""}>Cerrar con la encuesta</button></div>`;
   }
   const fallos = Object.entries(FALLOS).filter(([k]) => m.framing || !(k in (info.framing_faults || {})));
-  const revelar = m.framing && !m.framing.revealed
-    ? `<button data-revelar="${m.id}" title="Muestra los dos titulares en la proyección">Revelar titulares</button>` : "";
+  const oculto = (m.framing && !m.framing.revealed) || (m.diet && !m.diet.revealed);
+  const revelar = oculto
+    ? `<button data-revelar="${m.id}" title="Muestra los titulares en la proyección">Revelar titulares</button>` : "";
   // Antes de la fecha, preguntar sirve para ver que la IA no inventa: conviene decirlo antes de pulsar.
   const pronto = m.kind === "futuro" ? "Todavía no puede saberse: si preguntas ahora, lo correcto es que la IA se niegue."
     : m.topic ? "Si la fecha del criterio no ha llegado, lo correcto es que la IA se niegue: no adivina el futuro." : "";
@@ -167,6 +203,7 @@ function tarjeta(m, destacada) {
     ${barra(m.prices.YES)}
     ${destacada && m.orders ? sparkline(m.history) : ""}
     ${m.coverage.length ? cobertura(m.coverage) : ""}
+    ${dieta(m)}
     ${agentes(m)}
     ${encuadre(m)}
     ${veredicto(m)}
@@ -255,7 +292,8 @@ function borrador(d) {
   return `<div class="borrador">
     <p class="pequeno tenue">Tema: ${esc(d.topic)} · ${esc(d.model)} ${estado}</p>
     ${d.question ? `<p class="pregunta">${esc(d.question)}</p><p class="pequeno tenue">${esc(d.criteria)}</p>` : ""}
-    ${cobertura(d.articles)}
+    <details><summary class="pequeno">Ver los titulares (${d.articles.length}) · la sala no debería verlos antes
+      de apostar</summary>${cobertura(d.articles)}</details>
     <details><summary class="pequeno">Ver cómo se eligió</summary><ol class="traza">${d.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol></details>
     ${acciones}</div>`;
 }
@@ -321,6 +359,11 @@ const micro = usd => usd == null ? "—" : `${(usd * 1e6).toFixed(2)} µUSD`;
 let nubeActiva = false;
 
 function pistaNube(v, m) {
+  if (!m) {
+    return v.active ? "Abran la página en el móvil: cada consulta es tráfico real que la nube mide y predice."
+      : esPonente(info) ? "En pausa: la nube mide y predice, pero no enciende nada. Pulsa «Arrancar la nube»."
+      : "La nube está en pausa: mide y predice, pero no enciende nada.";
+  }
   if (m.error) return `El mercado no puede operar: ${m.error}`;
   if (!v.active) {
     return esPonente(info) ? "En pausa: nada cuesta. Pulsa «Arrancar la nube» para crear los servicios de los agentes."
@@ -336,18 +379,22 @@ function pistaNube(v, m) {
 async function pintarNube() {
   const v = await api("/api/infra", { headers: cabeceras() });
   const caja = document.getElementById("nube");
+  caja.hidden = v.mode === "apagado";
+  if (caja.hidden) return;
   const m = v.market;
-  caja.hidden = !m;
-  if (!m) return;
   nubeActiva = v.active;
   document.getElementById("nube-modo").textContent = v.mode === "real" ? "Google Cloud real"
     : `modo ${v.mode}: nada es real ni cobra`;
-  const ahora = v.rps.length ? v.rps[v.rps.length - 1].real : 0;
+  document.getElementById("nube-pista").textContent = pistaNube(v, m);
+  pintarTrafico(v);
+  const controles = document.getElementById("nube-controles");
+  controles.hidden = !esPonente(info);
+  controles.querySelector('[data-nube="actuar"]').textContent = v.active ? "Pausar la nube" : "Arrancar la nube";
+  document.getElementById("nube-mercado").hidden = !m;
+  if (!m) return;
   const vendidas = m.agents.reduce((x, a) => x + a.served, 0);
   const real = v.mode === "real";
-  document.getElementById("nube-pista").textContent = pistaNube(v, m);
   pintarSi(document.getElementById("nube-cifras"), `
-    <div><span class="pequeno tenue">Demanda de la sala</span><strong>${ahora.toFixed(1)} req/s</strong></div>
     <div><span class="pequeno tenue">Peticiones vendidas</span><strong>${vendidas}</strong></div>
     <div><span class="pequeno tenue">${real ? "Gasto real en Google Cloud" : "Gasto (ensayo, no cobra)"}</span><strong>${micro(m.spend_usd)}</strong></div>
     <div><span class="pequeno tenue">Generación</span><strong>${m.generation}</strong></div>`);
@@ -374,9 +421,41 @@ async function pintarNube() {
   pintarSi(document.getElementById("nube-evolucion"), [...contratos, ...generaciones].join("")
     || `<li class="tenue">La primera coalición llega a las ${m.budget.contract_every} subastas; la primera
         generación, a las ${m.budget.generation_cycles}.</li>`);
-  const controles = document.getElementById("nube-controles");
-  controles.hidden = !esPonente(info);
-  controles.querySelector('[data-nube="actuar"]').textContent = v.active ? "Pausar la nube" : "Arrancar la nube";
+}
+
+// Del tráfico a las máquinas: lo medido, lo previsto, lo que pide la previsión, lo que deja la
+// política y lo que hay encendido de verdad. Es el autoescalado predictivo, paso a paso.
+function pintarTrafico(v) {
+  const s = v.scaling;
+  const ahora = v.rps.length ? v.rps[v.rps.length - 1].real : 0;
+  const encendidas = v.nodes.reduce((x, n) => x + n.min, 0);
+  const donde = v.nodes.filter(n => n.min > 0).map(n => `${lugar(n.region)} ×${n.min}`).join(", ");
+  const recorte = s.allowed_min < s.wanted_min
+    ? `<span class="pequeno no">la política recortó ${s.wanted_min - s.allowed_min}</span>` : "";
+  pintarSi(document.getElementById("nube-flujo"), `
+    <li><span class="pequeno tenue">Tráfico de la sala ahora</span><strong>${ahora.toFixed(1)} req/s</strong>
+      <span class="pequeno tenue">consultas de los móviles</span></li>
+    <li><span class="pequeno tenue">Predicción para los próximos 10 s</span><strong>${s.forecast.toFixed(1)} req/s</strong>
+      <span class="pequeno tenue">modelo de Holt: nivel y tendencia</span></li>
+    <li><span class="pequeno tenue">Máquinas que pide la predicción</span><strong>${s.wanted_min}</strong>
+      <span class="pequeno tenue">una por cada ${s.rps_per_instance} req/s</span></li>
+    <li><span class="pequeno tenue">Máquinas que permite la política</span><strong>${s.allowed_min}</strong>
+      <span class="pequeno tenue">tope: ${v.policy.max_total_min} en total, para que salga barato</span>${recorte}</li>
+    <li><span class="pequeno tenue">Encendidas en Cloud Run</span><strong>${encendidas}</strong>
+      <span class="pequeno tenue">${donde ? esc(donde) : v.nodes.length ? "nodos creados, en cero" : "todavía sin nodos"}</span></li>`);
+  lineas(document.getElementById("nube-grafico"), {
+    x: v.rps.map(r => hora(r.t)),
+    series: [
+      { nombre: "real", valores: v.rps.map(r => r.real), color: "var(--serie-1)" },
+      { nombre: "predicho", valores: v.rps.map(r => r.predicho), color: "var(--serie-2)" },
+    ],
+    formato: n => n.toFixed(1),
+    titulo: i => hora(v.rps[i].t),
+  });
+  const e = v.log[0];
+  document.getElementById("nube-decision").textContent = !e ? "Todavía no hay decisiones."
+    : `Última decisión, ${hora(e.at)}: ${e.kind} ${lugar(e.region)}${e.min != null ? ` a ${e.min}–${e.max} instancias` : ""} · ` +
+      (e.allowed ? `ejecutada en Cloud Run (${e.result})` : `bloqueada: ${e.why}`);
 }
 
 function hora(t) {

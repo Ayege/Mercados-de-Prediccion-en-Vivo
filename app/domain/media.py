@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 from . import lmsr
 from .errors import MarketError
+from .framing import Exposure
 
 LEANS = ("izquierda", "derecha")
 # Qué inclinaciones lee cada dieta.
@@ -187,6 +188,11 @@ class AgentRead:
 class NewsCoverage:
     """Lo que una pregunta nacida de las noticias lleva consigo.
 
+    La sala también tiene dieta de medios: cada persona cae al azar en el grupo de
+    izquierda o en el de derecha y en su móvil solo ve los titulares de ese lado. Como
+    el reparto es al azar, la diferencia de apuestas entre grupos la causó la dieta.
+    Los titulares no salen en la proyección hasta revelarlos o resolver: la ve toda la sala.
+
     `reading` evita que los agentes lean dos veces a la vez: el estado vive en el
     mercado, dentro de la transacción, y no en el caso de uso.
     """
@@ -195,6 +201,23 @@ class NewsCoverage:
     articles: list[Article]
     reads: list[AgentRead] = field(default_factory=list)
     reading: bool = False
+    exposure: Exposure = field(default_factory=lambda: Exposure(LEANS))
+    revealed: bool = False
+
+    def assign(self, who: str, market_id: str) -> str:
+        return self.exposure.assign(who, market_id)
+
+    def side_for(self, who: str) -> str | None:
+        """Solo lectura: el lado de quien ya tiene grupo."""
+        return self.exposure.arms.get(who)
+
+    def articles_for(self, who: str) -> list[Article]:
+        side = self.side_for(who)
+        return [] if side is None else [a for a in self.articles if a.outlet.lean == side]
+
+    def record(self, who: str, outcome: str, spend: float, market_id: str) -> None:
+        self.assign(who, market_id)  # quien entró antes de que existiera la pregunta ya tiene grupo
+        self.exposure.record(who, outcome, spend)
 
     def start_reading(self) -> None:
         if self.reading:

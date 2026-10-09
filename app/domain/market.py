@@ -101,9 +101,13 @@ class Market:
             raise MarketError("el mercado ya está resuelto")
 
     def enroll(self, who: str) -> None:
-        """Asigna a la persona a un grupo del encuadre, si la pregunta lo tiene."""
-        if self.framing and self.status == "open":
+        """Asigna a la persona a un grupo: el titular del encuadre o el lado de los medios."""
+        if self.status != "open":
+            return
+        if self.framing:
             self.framing.assign(who, self.id)
+        if self.news:
+            self.news.assign(who, self.id)
 
     def headline_for(self, who: str) -> Headline | None:
         return self.framing.headline_for(who) if self.framing else None
@@ -123,6 +127,8 @@ class Market:
         self._remember(self.prices()["YES"])
         if self.framing and who is not None:
             self.framing.record(who, outcome, spend, self.id)
+        if self.news and who is not None:
+            self.news.record(who, outcome, spend, self.id)
         return shares
 
     def _remember(self, price: float) -> None:
@@ -148,6 +154,8 @@ class Market:
             self.status, self.outcome = "resolved", verdict.outcome
             if self.framing:
                 self.framing.revealed = True
+            if self.news:
+                self.news.revealed = True
             return True
         return False
 

@@ -48,6 +48,15 @@ def test_topology_becomes_real_nodes_scaled_by_demand():
     assert sum(n["min"] for n in nodes.values()) == 2  # 15 req/s / 10 por instancia
 
 
+def test_view_shows_the_path_from_traffic_to_machines():
+    c, _, clock, _ = setup()
+    cycles(c, clock, 4, rps=45)
+    s = c.view()["scaling"]
+    assert s["rps_per_instance"] == 10.0 and s["forecast"] > 30
+    assert s["wanted_min"] >= 4  # lo que pide la predicción
+    assert s["allowed_min"] == 2  # lo que deja la política: 2 instancias mínimas en total
+
+
 def test_no_demand_means_no_minimum_instances():
     c, _, clock, _ = setup()
     c.set_active(True)

@@ -87,6 +87,11 @@ class InfraState:
     incidents: list[RealIncident] = field(default_factory=list)
     last_cycle: float | None = None
     last_error: str = ""
+    # Del tráfico a las máquinas, en el último ciclo: lo previsto, las instancias mínimas que
+    # pidió esa previsión y las que dejó la política.
+    forecast: float = 0.0
+    wanted_min: int = 0
+    allowed_min: int = 0
 
 
 class InfraController:
@@ -150,6 +155,8 @@ class InfraController:
 
             total_min = ceil(forecast / self.rps_per_instance) if forecast > 0.05 else 0
             desired, notes = self.policy.clamp(distribute(self.topology(), total_min))
+            self.state.forecast, self.state.wanted_min = forecast, total_min
+            self.state.allowed_min = sum(s.min_instances for s in desired.values())
             self.state.notes.insert(0, f"demanda prevista {forecast:.1f} req/s → "
                                        f"{total_min} instancia(s) mínima(s)")
             self.state.notes += notes
@@ -368,6 +375,8 @@ class InfraController:
                 for n in sorted(st.actual.values(), key=lambda n: n.region) if n.exists
             ],
             "rps": [{"t": t, "real": r, "predicho": p} for t, r, p in st.rps],
+            "scaling": {"forecast": round(st.forecast, 2), "wanted_min": st.wanted_min,
+                        "allowed_min": st.allowed_min, "rps_per_instance": self.rps_per_instance},
             "log": [
                 {"at": e.at, "kind": e.action.kind, "region": e.action.region, "min": e.action.min_instances,
                  "max": e.action.max_instances, "fault": e.action.fault, "reason": e.action.reason,

@@ -20,7 +20,7 @@ const TIPOS = {
   },
   noticias: {
     etiqueta: "De las noticias",
-    mide: "Sale de los titulares de hoy. Cuatro bots leen medios distintos y también apuestan. La IA la decide cuando llegue la fecha.",
+    mide: "Sale de los titulares de hoy. La mitad de la sala lee solo medios de izquierda y la otra mitad solo de derecha; cuatro bots también leen y apuestan. La IA la decide cuando llegue la fecha.",
   },
   real: {
     etiqueta: "Nube real",
@@ -170,14 +170,14 @@ function guardado(clave, valor) {
   return valor;
 }
 
-// Línea de precio con referencia en 50 %. `history` guarda P(SÍ) tras cada orden.
+// Línea de la probabilidad del SÍ, con referencia en 50 %. `history` guarda P(SÍ) tras cada orden.
 function sparkline(historia, ancho = 320, alto = 80) {
   const h = historia.length > 1 ? historia : [historia[0] ?? 0.5, historia[0] ?? 0.5];
   const x = i => (i / (h.length - 1)) * ancho;
   const y = p => alto - p * alto;
   const puntos = h.map((p, i) => `${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(" ");
   return `<svg class="spark" viewBox="0 0 ${ancho} ${alto}" preserveAspectRatio="none" role="img"
-      aria-label="Evolución del precio del SÍ">
+      aria-label="Evolución de la probabilidad del SÍ">
     <line x1="0" x2="${ancho}" y1="${alto / 2}" y2="${alto / 2}" class="spark-ref"/>
     <polyline points="${puntos}" class="spark-linea" vector-effect="non-scaling-stroke"/>
   </svg>`;

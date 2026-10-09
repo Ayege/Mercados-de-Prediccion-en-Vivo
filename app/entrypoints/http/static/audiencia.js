@@ -52,6 +52,16 @@ function posicion(u, m) {
   return `<p class="pequeno">Tu apuesta: ${lados.join("; ")}.</p>`;
 }
 
+// Tu dieta de medios: los titulares de tu lado. No se dice qué lado es: el experimento es el
+// titular, no la etiqueta. Al revelar, la proyección muestra los dos lados.
+function tusNoticias(d) {
+  if (!d || !d.articles.length) return "";
+  return `<div class="titular"><span class="pequeno tenue">Tus noticias (la otra mitad de la sala lee otros
+    medios; se revela al final)</span>
+    <ul class="pequeno" style="margin:.3rem 0;padding-left:1.1rem">${d.articles.map(a => `<li>«${esc(a.headline)}»
+      <span class="tenue">— ${esc(a.outlet)}</span></li>`).join("")}</ul></div>`;
+}
+
 // La revelación: lo que creía la sala frente a lo que encontró quien decide.
 function revelacion(m) {
   const c = m.check;
@@ -113,6 +123,7 @@ async function pintar() {
     <article class="tarjeta">
       <span class="chip">${esc(tipo(m).etiqueta)}</span>
       ${titular(u.headlines?.[m.id], "Tu titular (otras personas leen uno distinto; se revela al final)")}
+      ${tusNoticias(u.diets?.[m.id])}
       <p class="pregunta">${esc(m.question)}</p>
       <p class="pequeno tenue" style="margin:0">La sala cree:</p>
       ${barra(m.prices.YES)}

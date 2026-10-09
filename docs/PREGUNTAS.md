@@ -1,16 +1,16 @@
 # Tipos de pregunta
 
-Qué mide el precio según el tipo de pregunta, cómo elegir qué preguntas se
+Qué mide la probabilidad de la sala según el tipo de pregunta, cómo elegir qué preguntas se
 siembran al arrancar y qué fallos del oráculo se pueden provocar para ver cómo
 los rechaza el código.
 
 ## Qué mide cada tipo
 
-Cada mercado declara su tipo, porque el tipo cambia lo que mide el precio:
+Cada mercado declara su tipo, porque el tipo cambia lo que mide la probabilidad que marca la barra:
 
-| Tipo | Ejemplo | Qué mide el precio | Quién lo resuelve |
+| Tipo | Ejemplo | Qué mide la probabilidad | Quién lo resuelve |
 | --- | --- | --- | --- |
-| `presente` | ¿Salió Python 3.15.0 antes del 8/10/2026? | La respuesta ya existe, pero nadie en la sala la sabe con certeza. El precio agrega conocimiento disperso **sobre el presente** | El oráculo, con evidencia |
+| `presente` | ¿Salió Python 3.15.0 antes del 8/10/2026? | La respuesta ya existe, pero nadie en la sala la sabe con certeza. La probabilidad agrega conocimiento disperso **sobre el presente** | El oráculo, con evidencia |
 | `futuro` | ¿Cerrará el USD/DOP sobre 65 el 31/12/2026? | Hoy no se puede resolver, a propósito: lo correcto es que el oráculo diga **SIN RESOLVER** | El oráculo, que debe negarse |
 | `sala` | ¿Más de la mitad de esta sala desplegó un viernes este mes? | Cada persona conoce una parte y ningún buscador la tiene. Aquí el mecanismo de agregación se luce | Un censo privado de la sala |
 | `simulacion` | ¿La primera caída de nodo se reparará en menos de 6 ticks? | Comportamiento emergente de los agentes, con plazo de minutos | El código de la simulación |
@@ -75,5 +75,5 @@ para ver al código rechazar un veredicto:
 
 Los cuatro primeros se inyectan en la respuesta cruda del modelo, antes del mismo
 código que lee a Vertex AI: lo que se ve rechazar es la ruta de producción, no una
-simulación aparte. Cada consulta queda registrada con su fallo, el precio de la
+simulación aparte. Cada consulta queda registrada con su fallo, la probabilidad de la
 sala en ese momento y el motivo del rechazo.

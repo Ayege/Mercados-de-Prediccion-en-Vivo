@@ -49,6 +49,13 @@ def framing_view(m: Market) -> dict | None:
     return out
 
 
+def diet_view(m: Market) -> dict | None:
+    """La sala dividida por dieta de medios: agregados por lado, nunca por persona."""
+    if m.news is None:
+        return None
+    return {"groups": m.news.exposure.summary(), "revealed": m.news.revealed}
+
+
 def article_view(a: Article) -> dict:
     return {"headline": a.headline, "url": a.url, "outlet": a.outlet.name, "lean": a.outlet.lean,
             "source": a.outlet.source, "via": a.via or None}
@@ -60,13 +67,15 @@ def draft_view(d: NewsDraft) -> dict:
             "model": d.model, "market_id": d.market_id}
 
 
-def agent_read_view(r: AgentRead, outcome: str | None) -> dict:
-    """Lo que leyó, lo que creyó, lo que apostó y, si ya se resolvió, lo que ganó o perdió."""
+def agent_read_view(r: AgentRead, outcome: str | None, revealed: bool = True) -> dict:
+    """Lo que leyó, lo que creyó, lo que apostó y, si ya se resolvió, lo que ganó o perdió.
+    Antes de revelar, ni los titulares ni el razonamiento: los vería toda la sala."""
     pnl = None
     if outcome in ("YES", "NO"):
         pnl = round((r.shares if r.outcome == outcome else 0.0) - r.stake, 2)
-    return {"agent": r.agent, "diet": r.diet, "read": [article_view(a) for a in r.read],
-            "p": None if r.p is None else round(r.p, 3), "reasoning": r.reasoning,
+    return {"agent": r.agent, "diet": r.diet, "read": [article_view(a) for a in r.read] if revealed else [],
+            "read_count": len(r.read),
+            "p": None if r.p is None else round(r.p, 3), "reasoning": r.reasoning if revealed else "",
             "price_before": round(r.price_before, 3), "outcome": r.outcome, "stake": r.stake,
             "shares": round(r.shares, 2), "pnl": pnl}
 
@@ -98,8 +107,12 @@ def market_view(m: Market) -> dict:
         "max_loss": round(m.max_loss, 2),
         "framing": framing_view(m),
         "topic": m.news.topic if m.news else None,
-        "coverage": [article_view(a) for a in m.news.articles] if m.news else [],
-        "agents": [agent_read_view(r, m.outcome) for r in m.news.reads] if m.news else [],
+        # Los titulares solo al revelar o al resolver; mientras, cuántos hay de cada lado.
+        "coverage": [article_view(a) for a in m.news.articles] if m.news and m.news.revealed else [],
+        "coverage_count": {lean: sum(1 for a in m.news.articles if a.outlet.lean == lean)
+                           for lean in ("izquierda", "derecha")} if m.news else None,
+        "diet": diet_view(m),
+        "agents": [agent_read_view(r, m.outcome, m.news.revealed) for r in m.news.reads] if m.news else [],
         "agents_reading": bool(m.news and m.news.reading),
         "check": check_view(m),
     }

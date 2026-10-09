@@ -113,7 +113,7 @@ class MarketService:
                    news=NewsCoverage(topic, list(coverage)) if coverage else None)
         with self.repo.transaction():
             self.repo.add_market(m)
-            if m.framing:  # quien ya estaba en la sala recibe su grupo ahora, no al leer
+            if m.framing or m.news:  # quien ya estaba en la sala recibe su grupo ahora, no al leer
                 for acc in self.repo.accounts():
                     if acc.name not in AGENTS:
                         m.enroll(acc.name)
@@ -164,10 +164,13 @@ class MarketService:
             return {"census_count": len(m.census)}
 
     def reveal(self, market_id: str) -> dict:
-        """Muestra los dos titulares en la proyección. La sala sigue pudiendo operar."""
+        """Muestra los titulares en la proyección. La sala sigue pudiendo operar."""
         with self.repo.transaction():
             m = require_market(self.repo, market_id)
-            if m.framing is None:
+            if m.framing is None and m.news is None:
                 raise MarketError("esta pregunta no tiene titulares")
-            m.framing.revealed = True
+            if m.framing:
+                m.framing.revealed = True
+            if m.news:
+                m.news.revealed = True
             return market_view(m)

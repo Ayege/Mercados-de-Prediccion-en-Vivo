@@ -91,7 +91,7 @@ def test_opening_creates_a_market_with_its_coverage_once():
     n = news()
     d = asyncio.run(n.propose("tasa"))
     m = n.open(d["id"])
-    assert m["topic"] == "tasa" and {a["lean"] for a in m["coverage"]} == {"izquierda", "derecha"}
+    assert m["topic"] == "tasa" and m["coverage_count"] == {"izquierda": 1, "derecha": 1}
     assert m["prices"]["YES"] == 0.5
     with pytest.raises(MarketError):
         n.open(d["id"])
@@ -157,3 +157,42 @@ def test_agents_cannot_be_used_from_outside():
     from app.application.errors import Unauthorized
     with pytest.raises(Unauthorized):
         n.markets.account("agente:izquierda", "")
+
+
+# --- la sala también tiene dieta de medios ------------------------------------------------
+def test_the_room_is_split_by_side_and_each_phone_sees_only_its_side():
+    n = news()
+    entered = [n.markets.enter(name) for name in ("ana", "beto", "caro", "dani")]  # antes de la pregunta
+    mid = opened(n)
+    late = n.markets.enter("eva")  # después de la pregunta
+    sides = []
+    for e in [*entered, late]:
+        diet = n.markets.account(e["name"], e["token"])["diets"][mid]
+        assert diet["side"] in ("izquierda", "derecha")
+        assert {a["lean"] for a in diet["articles"]} == {diet["side"]}
+        sides.append(diet["side"])
+    assert abs(sides.count("izquierda") - sides.count("derecha")) <= 1
+
+
+def test_room_bets_are_counted_by_side_and_agent_bets_are_not():
+    n = news()
+    mid = opened(n)
+    e = n.markets.enter("ana")
+    side = n.markets.account("ana", e["token"])["diets"][mid]["side"]
+    n.markets.trade(mid, "ana", e["token"], "YES", 50)
+    asyncio.run(n.consult_agents(mid))
+    groups = n.markets.view(mid)["diet"]["groups"]
+    assert groups[side]["traders"] == 1 and groups[side]["yes_share"] == 1.0
+    other = "derecha" if side == "izquierda" else "izquierda"
+    assert groups[other]["traders"] == 0
+
+
+def test_the_projection_hides_headlines_and_reasoning_until_revealed():
+    n = news()
+    mid = opened(n)
+    m = asyncio.run(n.consult_agents(mid))
+    assert m["coverage"] == [] and not m["diet"]["revealed"]
+    assert all(a["read"] == [] and a["reasoning"] == "" for a in m["agents"])
+    assert {a["diet"]: a["read_count"] for a in m["agents"]}["ambas"] == 2
+    m = n.markets.reveal(mid)
+    assert len(m["coverage"]) == 2 and all(a["reasoning"] for a in m["agents"])

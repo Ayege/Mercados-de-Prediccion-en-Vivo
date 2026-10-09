@@ -1,14 +1,103 @@
 # Oráculo
 
-Un mercado de predicción en vivo. Las personas de una sala apuestan desde el
-móvil y los precios son probabilidades. Un modelo de IA intenta resolver cada
-pregunta, y el código decide si acepta lo que dice. Todo corre en Google Cloud.
+¿Cómo influyen los medios en lo que cree la gente y en lo que concluye una IA?
+Oráculo lo pone a prueba en vivo. Las personas de una sala apuestan desde el
+móvil si algo pasará o no, y la barra muestra la probabilidad que le da la sala
+en conjunto. Unos agentes de IA leen las mismas noticias y también apuestan. Al
+final, un modelo de IA busca la respuesta y el código decide si acepta lo que
+dice. Todo corre en Google Cloud.
 
 **Demo:** https://oraculo-api-346171942822.us-east1.run.app
 
-La idea que atraviesa todo el proyecto es una sola: **el modelo propone, el
-código dispone.** Un LLM es un componente no confiable, y lo interesante es ver
-dónde y por qué el código le dice que no.
+La regla que atraviesa el proyecto: **el modelo propone, el código dispone.** Un
+LLM es un componente no confiable, y lo interesante es ver dónde y por qué el
+código le dice que no.
+
+## Medios, gente e IA
+
+Las personas y los modelos aprenden del mismo lugar: las noticias. Oráculo pone
+a las dos frente al mismo hecho contado de formas distintas y mide cuánto se
+mueve cada una.
+
+| Qué se pregunta | Cómo se mide | Qué se ve en la proyección |
+| --- | --- | --- |
+| ¿Un titular cambia lo que cree **la gente**? | La sala se divide al azar en dos grupos. Cada grupo lee un titular distinto sobre el mismo hecho y apuesta. Como el reparto es al azar, la diferencia entre grupos la causa el titular, no quién es cada grupo | Qué parte de lo apostado por cada grupo fue al SÍ, y la diferencia en puntos |
+| ¿Lo que lee **la gente** cambia lo que cree? | En las preguntas que nacen de las noticias, la sala se divide al azar: una mitad ve en su móvil solo los titulares de medios de izquierda y la otra, solo los de derecha | Qué parte de lo apostado por cada mitad fue al SÍ, junto a lo que creyó el bot que leyó lo mismo |
+| ¿Un titular cambia lo que concluye **la IA**? | El oráculo responde tres veces: sin titular, con el que empuja al SÍ y con el que empuja al NO. Si su respuesta cambia con la redacción, el código la rechaza, porque los hechos eran los mismos | Las tres respuestas y si se aceptó el veredicto |
+| ¿Lo que lee una IA cambia lo que **cree**? | Cuatro agentes Gemini reciben la cobertura del día filtrada por su dieta: solo medios de izquierda, solo de derecha, de ambos lados o ninguno. Cada uno da una probabilidad y apuesta | Qué titulares leyó cada agente, qué probabilidad le dio al SÍ y cuánto apostó |
+
+La inclinación de cada medio no la decide el código ni el modelo: viene de
+fuentes publicadas, citadas en pantalla. Los titulares son reales, de Google
+News, y nunca los escribe el modelo.
+
+### Cómo leer un resultado
+
+- **Con una sala, una diferencia chica puede ser ruido.** Con pocas decenas de
+  personas, unos puntos entre grupos no prueban nada. La pantalla lo dice.
+- **Un LLM no es una hoja en blanco.** Trae lo que aprendió al entrenarse. En
+  una prueba sobre inmigración, las cuatro dietas creyeron entre 80 y 88 %. En
+  otra, sobre el Nobel de la Paz 2026, los agentes que leyeron noticias de
+  cualquier lado creyeron entre 75 y 80 %. El agente sin noticias creyó 2 %
+  porque no sabía que la premiada ya había ganado. A veces los medios mueven la
+  opinión de la IA, y a veces solo le dan los hechos.
+- **El orden importa.** Los agentes apuestan uno tras otro y el último deja la
+  barra donde él cree. La pantalla lo dice.
+- **Izquierda y derecha es una simplificación.** La lista es binaria y mide cómo
+  perciben las audiencias a cada medio, no su calidad.
+
+Así se comparan directamente: la mitad de la sala que leyó izquierda junto al
+bot que leyó izquierda, y lo mismo con derecha. Los titulares y el razonamiento
+de los bots no salen en la proyección hasta revelarlos, para no contaminar a la
+otra mitad.
+
+### Lo que todavía no mide
+
+- **Las preguntas con un titular a favor y otro en contra** se crean por API con
+  titulares reales y su enlace, sin un botón en la proyección.
+- **Los bots apuestan en el mismo mercado que la sala**, así que la barra que
+  ven las dos mitades ya incluye lo que apostaron los bots. La comparación limpia
+  es la de qué apostó cada mitad, no la barra.
+
+Los detalles de cada pieza están en [Noticias, encuadre y opinión](docs/NOTICIAS.md).
+
+## La nube negocia sus recursos con el tráfico
+
+Los móviles de la sala son la demanda real: cada consulta que hace un móvil que
+entró a la sala cuenta como tráfico. Cada 10 s, la nube hace dos cosas con ese
+tráfico, y la proyección muestra las dos en la sección «La nube negocia sus
+recursos con su tráfico».
+
+**1. Del tráfico a las máquinas (autoescalado predictivo).** La proyección lo
+muestra como una cadena de cinco cifras y una gráfica:
+
+| Paso | Qué pasa |
+| --- | --- |
+| Tráfico de la sala | Se miden las peticiones por segundo del último ciclo |
+| Predicción | Un modelo de Holt (nivel y tendencia) predice las de los próximos 10 s. La gráfica pone lo real junto a lo que predijo un ciclo antes |
+| Máquinas que pide | Una instancia mínima de Cloud Run por cada 10 req/s previstas (`INFRA_RPS_POR_INSTANCIA`), encendida **antes** de que llegue el tráfico para evitar arranques en frío |
+| Máquinas que permite la política | `ActuationPolicy` recorta lo pedido a lo que la cuenta permite: 2 instancias mínimas en total, regiones permitidas y un cambio por minuto por región. Si recorta, la pantalla lo dice |
+| Encendidas en Cloud Run | Lo que de verdad hay encendido, por región, y la última decisión: ejecutada o bloqueada, con su motivo |
+
+**2. Quién atiende ese tráfico (la subasta).** El tráfico del ciclo, hasta 12
+peticiones, se subasta entre cuatro agentes. Cada agente opera su propio servicio
+de Cloud Run en una región distinta. Venden los que piden menos, cobran solo lo
+que atienden a tiempo y pagan el costo real de Cloud Run, con precios del
+catálogo de Cloud Billing. Cada 6 subastas se ofrece un contrato que exige dos
+regiones (una coalición). Cada 12, la evolución copia a los agentes que más
+ganaron, incluido si les conviene pagar una instancia siempre encendida.
+
+Lo que esto es y lo que no:
+
+- **Es real:** el tráfico, las instancias, los servicios de los agentes y sus
+  costos, en Cloud Run. Una hora de mercado cuesta alrededor de un centavo.
+- **Es pequeño a propósito:** con el tráfico de una sala y un tope de 2
+  instancias, el escalado se nota en unidades, no en cientos.
+- **No es descentralizado:** hay un subastador central y el dinero de los
+  agentes es contable. Los detalles, en [La nube autónoma](docs/NUBE.md).
+
+Para verlo, quien modera pulsa «Arrancar la nube» en la proyección y la sala abre
+la página en el móvil. Si nadie mira la proyección ni `/nube.html` durante 30
+minutos, la vigilia borra los servicios.
 
 ## Qué hace
 
