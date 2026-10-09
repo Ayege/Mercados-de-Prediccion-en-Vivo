@@ -66,6 +66,16 @@ def test_phones_get_a_summary_without_history_or_traces(client):
     summary = client.get("/api/markets", params={"resumen": True}).json()[0]
     assert summary["prices"] == full["prices"] and summary["status"] == "open"
     assert set(summary) < set(full) and "history" not in summary and "attempts" not in summary
+    assert summary["check"] is None
+
+
+def test_phones_see_what_the_room_believed_when_it_was_checked(client, monkeypatch):
+    monkeypatch.setenv("ORACLE_MOCK_FORCE", "YES")
+    mid = new_market(client)
+    trade(client, mid, "aye", "NO", 100)
+    client.post(f"/api/markets/{mid}/resolve")
+    check = client.get("/api/markets", params={"resumen": True}).json()[0]["check"]
+    assert check["outcome"] == "YES" and check["price_yes"] < 0.5 and check["sources"] >= 2
 
 
 def test_insufficient_balance_is_rejected(client):

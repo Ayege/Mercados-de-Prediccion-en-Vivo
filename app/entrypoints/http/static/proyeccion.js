@@ -1,30 +1,26 @@
 // Lógica de proyeccion.html. Va en un archivo aparte para que la CSP prohíba scripts en línea.
 let info = {};
-const ocupado = new Set();
+const ocupado = new Set();  // el oráculo está consultando esta pregunta
+const leyendo = new Set();  // los agentes están leyendo esta pregunta
 const abiertos = new Set();
 
+// El veredicto en una frase: qué dijo quien decide y si la sala había acertado.
 function contraste(m) {
   const v = m.oracle;
   if (!v) return "";
-  const creencia = `La sala decía <strong>${pct(v.price_yes)} SÍ</strong>`;
-  const fuentes = new Set(v.evidence.map(e => e.domain)).size;
+  const sala = `La sala creía ${pct(v.price_yes)} SÍ.`;
   if (v.outcome === "UNRESOLVED") {
-    const quien = { censo: "El censo", "simulación": "La simulación",
-                    "infraestructura real": "Cloud Run" }[m.resolver] || "El oráculo";
-    return `${creencia}. ${quien} <strong class="pendiente">se negó a resolver</strong>.`;
+    return `<strong class="pendiente">Aún no se sabe.</strong> ${motivo(m)}
+      <span class="tenue">${sala} La pregunta sigue abierta.</span>`;
   }
   const clase = v.outcome === "YES" ? "si" : "no";
-  const juez = { censo: "el censo", "simulación": "la simulación",
-                 "infraestructura real": "lo medido en Cloud Run" }[m.resolver];
-  const base = juez
-    ? `${juez} dice <strong class="${clase}">${RESULTADO[v.outcome]}</strong>`
-    : `el oráculo dice <strong class="${clase}">${RESULTADO[v.outcome]}</strong> con ${fuentes} fuente(s)`;
-  // ¿Se movió el precio hacia la respuesta desde la apertura en 50 %?
-  const haciaVerdad = v.outcome === "YES" ? v.price_yes > 0.5 : v.price_yes < 0.5;
-  const lectura = Math.abs(v.price_yes - 0.5) < 0.02
-    ? "El precio no se movió de la apertura."
-    : haciaVerdad ? "El precio se había movido hacia la respuesta." : "El precio se había movido en contra.";
-  return `${creencia}; ${base}. <span class="tenue">${lectura}</span>`;
+  const fuentes = [...new Set(v.evidence.map(e => e.domain))];
+  const quien = { censo: "La encuesta privada dice", "simulación": "La simulación dice",
+                  "infraestructura real": "Lo medido en Google Cloud dice" }[m.resolver]
+    || `La IA encontró la respuesta en ${fuentes.length} fuente(s) distintas:`;
+  const acerto = Math.abs(v.price_yes - 0.5) < 0.02 ? "La sala no se inclinaba por ningún lado."
+    : (v.outcome === "YES") === (v.price_yes > 0.5) ? "<strong>La sala acertó.</strong>" : "<strong>La sala se equivocó.</strong>";
+  return `${quien} <strong class="${clase}">${RESULTADO[v.outcome]}</strong>. ${sala} ${acerto}`;
 }
 
 // El experimento de encuadre: qué apostó cada grupo según el titular que vio.
@@ -57,13 +53,13 @@ function encuadre(m) {
 // Qué leyó, creyó y apostó cada agente según su dieta de medios.
 function agentes(m) {
   if (!m.coverage.length) return "";
-  const titulo = `<p class="pequeno"><strong>Agentes y dieta de medios</strong> · cuatro agentes leen la misma
-    cobertura, cada uno solo lo que su dieta le permite, y apuestan en este mercado.</p>`;
+  const titulo = `<p class="pequeno"><strong>Cuatro bots también apuestan.</strong> Cada uno solo lee ciertos
+    medios: uno de izquierda, uno de derecha, uno ambos y uno ninguno. ¿Cambia su apuesta según lo que lee?</p>`;
   if (!m.agents.length) {
     const boton = m.status === "open" && esPonente(info)
-      ? `<button data-agentes="${m.id}" ${ocupado.has(m.id) ? "disabled" : ""}>
-          ${ocupado.has(m.id) ? "Leyendo…" : "Que opinen los agentes"}</button>` : "";
-    return `<div class="agentes">${titulo}<p class="pequeno tenue">Todavía no han leído nada.</p>${boton}</div>`;
+      ? `<button data-agentes="${m.id}" ${leyendo.has(m.id) ? "disabled" : ""}>
+          ${leyendo.has(m.id) ? "Leyendo los titulares…" : "Que apuesten los bots"}</button>` : "";
+    return `<div class="agentes">${titulo}${boton}</div>`;
   }
   const bloques = m.agents.map(a => {
     const barra = a.p == null ? `<p class="pequeno tenue">No pudo leer: no apostó.</p>` : `
@@ -71,19 +67,18 @@ function agentes(m) {
         <span class="sala" style="left:calc(${a.price_before * 100}% - 2px)"></span>
         <span class="agente" style="left:calc(${a.p * 100}% - 2px)"></span></div>`;
     const apuesta = a.outcome
-      ? `compró <strong class="${a.outcome === "YES" ? "si" : "no"}">${RESULTADO[a.outcome]}</strong> por ${a.stake.toFixed(0)}`
+      ? `apostó ${a.stake.toFixed(0)} a <strong class="${a.outcome === "YES" ? "si" : "no"}">${RESULTADO[a.outcome]}</strong>`
       : "no apostó";
     const pnl = a.pnl == null ? ""
       : ` · <strong class="${a.pnl >= 0 ? "si" : "no"}">${a.pnl >= 0 ? "ganó" : "perdió"} ${Math.abs(a.pnl).toFixed(0)}</strong>`;
     return `<div class="agente-fila">
-      <p class="pequeno" style="margin:0"><strong>${esc(DIETAS[a.diet])}</strong> · leyó ${a.read.length} titular(es) ·
-        cree <strong>${a.p == null ? "—" : pct(a.p)}</strong> SÍ (el precio estaba en ${pct(a.price_before)}) · ${apuesta}${pnl}</p>
+      <p class="pequeno" style="margin:0">Bot que lee <strong>${esc(DIETAS[a.diet])}</strong> (${a.read.length} titular(es)):
+        cree <strong>${a.p == null ? "—" : pct(a.p)}</strong> SÍ · ${apuesta}${pnl}</p>
       ${barra}
       <p class="pequeno tenue" style="margin:0">${esc(a.reasoning)}</p></div>`;
   }).join("");
   return `<div class="agentes">${titulo}${bloques}
-    <p class="pequeno tenue">En cada barra, gris es el precio que encontró el agente y azul lo que creyó. Apostaron
-    uno tras otro, comprando hasta llevar el precio a su creencia, así que el último fija el precio que ve la sala.</p></div>`;
+    <p class="pequeno tenue">Gris: lo que creía la sala cuando apostó el bot. Azul: lo que creyó el bot.</p></div>`;
 }
 
 // Cómo leyó el modelo la misma pregunta con cada titular.
@@ -100,12 +95,14 @@ function veredicto(m) {
   const v = m.oracle;
   if (!v) return "";
   const fuentes = v.evidence.length
-    ? `<p class="pequeno">Fuentes: ${[...new Set(v.evidence.map(e => esc(e.domain)))].join(" · ")}</p>` : "";
-  return `<p class="contraste">${contraste(m)}</p>
-    ${v.reasoning ? `<p class="pequeno tenue">${esc(v.reasoning)}</p>` : ""}
-    ${fuentes}
-    ${lecturas(v)}
-    <ol class="traza">${v.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol>`;
+    ? `<p>Fuentes: ${[...new Set(v.evidence.map(e => esc(e.domain)))].join(" · ")}</p>` : "";
+  return `<p class="veredicto">${contraste(m)}</p>
+    <details class="pequeno"><summary>Ver cómo lo decidió</summary>
+      ${v.reasoning ? `<p>${esc(v.reasoning)}</p>` : ""}
+      ${fuentes}
+      ${lecturas(v)}
+      <ol class="traza">${v.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol>
+    </details>`;
 }
 
 function intentos(m) {
@@ -132,8 +129,8 @@ function ponente(m) {
   }
   if (m.kind === "sala") {
     return `<div class="ponente fila">
-      <span class="pequeno tenue">${m.census_count} respuesta(s) al censo</span>
-      <button data-resolver="${m.id}" ${espera ? "disabled" : ""}>Cerrar con el censo</button></div>`;
+      <span class="pequeno tenue">${m.census_count} respuesta(s) a la encuesta</span>
+      <button data-resolver="${m.id}" ${espera ? "disabled" : ""}>Cerrar con la encuesta</button></div>`;
   }
   const fallos = Object.entries(FALLOS).filter(([k]) => m.framing || !(k in (info.framing_faults || {})));
   const revelar = m.framing && !m.framing.revealed
@@ -141,11 +138,30 @@ function ponente(m) {
   return `<div class="ponente fila">
     <button data-resolver="${m.id}" ${espera ? "disabled" : ""}
       title="${m.framing ? "Consulta tres veces: sin titular y con cada uno. Solo acepta si coinciden" : ""}">
-      ${espera ? "Consultando…" : "Consultar al oráculo"}</button>
-    <select data-fallo="${m.id}" aria-label="Inyectar un fallo">
-      <option value="">sin fallo</option>
-      ${fallos.map(([k, t]) => `<option value="${k}">fallo: ${t}</option>`).join("")}
-    </select>${revelar}</div>`;
+      ${espera ? "La IA está buscando…" : "Preguntar a la IA"}</button>${revelar}
+    <details class="pequeno"><summary>Modo demo</summary>
+      <select data-fallo="${m.id}" aria-label="Provocar un fallo en la próxima consulta">
+        <option value="">sin fallo</option>
+        ${fallos.map(([k, t]) => `<option value="${k}">provocar: ${t}</option>`).join("")}
+      </select></details></div>`;
+}
+
+function tarjeta(m, destacada) {
+  const estado = m.status === "resolved" ? `<span class="chip">salió ${RESULTADO[m.outcome]}</span>` : "";
+  return `<article class="tarjeta${destacada ? " destacada" : ""}">
+    <div class="fila" style="margin:0"><span class="chip">${esc(tipo(m).etiqueta)}${m.topic ? `: ${esc(m.topic)}` : ""}</span>${estado}</div>
+    <p class="pregunta">${esc(m.question)}</p>
+    ${destacada ? `<p class="mide tenue">${esc(tipo(m).mide)}</p>` : ""}
+    <p class="tenue pequeno" style="margin:0">La sala cree · ${m.orders} apuesta(s)</p>
+    ${barra(m.prices.YES)}
+    ${destacada && m.orders ? sparkline(m.history) : ""}
+    ${m.coverage.length ? cobertura(m.coverage) : ""}
+    ${agentes(m)}
+    ${encuadre(m)}
+    ${veredicto(m)}
+    ${intentos(m)}
+    ${ponente(m)}
+  </article>`;
 }
 
 async function pintar() {
@@ -154,26 +170,17 @@ async function pintar() {
   document.querySelectorAll("[data-fallo]").forEach(s => { fallos[s.dataset.fallo] = s.value; });
   abiertos.clear();
   document.querySelectorAll("details[data-intentos][open]").forEach(d => abiertos.add(d.dataset.intentos));
-  pintarSi(document.getElementById("lista"), ordenar(mercados).map(m => {
-    const p = m.prices.YES;
-    const estado = m.status === "resolved"
-      ? `<span class="chip">resuelto: ${RESULTADO[m.outcome]}</span>` : "";
-    return `<article class="tarjeta">
-      <div class="fila" style="margin:0"><span class="chip">${esc(tipo(m).etiqueta)}${m.topic ? `: ${esc(m.topic)}` : ""}</span>${estado}</div>
-      <p class="pregunta">${esc(m.question)}</p>
-      <p class="mide tenue">${esc(tipo(m).mide)}</p>
-      <p><span class="grande precio si">${pct(p)}</span> <span class="tenue">SÍ · abrió en 50 %
-        · ${m.orders} órdenes</span></p>
-      ${sparkline(m.history)}
-      ${m.coverage.length ? cobertura(m.coverage) : ""}
-      ${agentes(m)}
-      ${encuadre(m)}
-      ${veredicto(m)}
-      ${intentos(m)}
-      ${ponente(m)}
-    </article>`;
-  }).join("") || `<p class="tenue">Todavía no hay preguntas. ${esPonente(info) && info.news
-    ? "Crea una desde las noticias." : ""}</p>`);
+  // Las preguntas del oráculo son el centro de la demo: van primero y en grande. El resto, compacto.
+  const delOraculo = ordenar(mercados).filter(m => m.resolver === "oráculo");
+  const otras = ordenar(mercados).filter(m => m.resolver !== "oráculo");
+  const vacio = `<p class="tenue">Todavía no hay preguntas. ${esPonente(info) && info.news
+    ? "Escribe un tema arriba y crea una desde las noticias de hoy." : "Aparecerán aquí en cuanto se abra la primera."}</p>`;
+  pintarSi(document.getElementById("lista"), mercados.length ? `
+    ${delOraculo.length ? `<h2>Lo decide la IA</h2>
+      <p class="tenue">Ustedes apuestan sin buscar. Luego la IA busca la respuesta en internet: ¿quién acierta?</p>
+      <div class="rejilla">${delOraculo.map(m => tarjeta(m, true)).join("")}</div>` : ""}
+    ${otras.length ? `<h2 class="${delOraculo.length ? "secundario" : ""}">${delOraculo.length ? "Otras preguntas" : "Preguntas"}</h2>
+      <div class="rejilla ${delOraculo.length ? "compacta" : ""}">${otras.map(m => tarjeta(m, !delOraculo.length)).join("")}</div>` : ""}` : vacio);
   for (const [id, valor] of Object.entries(fallos)) {
     const s = document.querySelector(`[data-fallo="${id}"]`);
     if (s) s.value = valor;
@@ -185,14 +192,14 @@ document.getElementById("lista").addEventListener("click", async e => {
   if (g) {
     const id = g.dataset.agentes;
     document.getElementById("error").textContent = "";
-    ocupado.add(id);
+    leyendo.add(id);
     pintar();
     try {
       await api(`/api/markets/${id}/agentes`, { method: "POST", headers: cabeceras() });
     } catch (err) {
       document.getElementById("error").textContent = err.message;
     } finally {
-      ocupado.delete(id);
+      leyendo.delete(id);
       pintar();
     }
     return;
@@ -230,7 +237,7 @@ document.getElementById("lista").addEventListener("click", async e => {
 // --- panel del ponente: preguntas desde las noticias -----------------------------
 function borrador(d) {
   const estado = d.market_id ? `<span class="chip">abierta</span>`
-    : d.accepted ? `<span class="chip si">la política la acepta</span>` : `<span class="chip no">rechazada</span>`;
+    : d.accepted ? `<span class="chip si">lista para abrir</span>` : `<span class="chip no">no sirve: busca otro tema</span>`;
   const acciones = d.market_id ? "" : `<div class="fila">
     ${d.accepted ? `<button data-abrir="${d.id}">Abrir pregunta</button>` : ""}
     <button data-descartar="${d.id}">Descartar</button></div>`;
@@ -238,7 +245,7 @@ function borrador(d) {
     <p class="pequeno tenue">Tema: ${esc(d.topic)} · ${esc(d.model)} ${estado}</p>
     ${d.question ? `<p class="pregunta">${esc(d.question)}</p><p class="pequeno tenue">${esc(d.criteria)}</p>` : ""}
     ${cobertura(d.articles)}
-    <details><summary class="pequeno">Traza</summary><ol class="traza">${d.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol></details>
+    <details><summary class="pequeno">Ver cómo se eligió</summary><ol class="traza">${d.trace.map(t => `<li>${esc(t)}</li>`).join("")}</ol></details>
     ${acciones}</div>`;
 }
 
@@ -247,7 +254,7 @@ async function pintarNoticias() {
   const medios = v.media;
   const lados = l => medios.outlets.filter(o => o.lean === l).map(o => o.name).join(", ") || "ninguno";
   document.getElementById("medios").innerHTML = medios.ready
-    ? `Lista de medios${medios.rehearsal ? " <strong>de ensayo (ficticios)</strong>" : ""}: izquierda: ${esc(lados("izquierda"))} ·
+    ? `Medios${medios.rehearsal ? " <strong>de ensayo (ficticios)</strong>" : ""}: izquierda: ${esc(lados("izquierda"))} ·
        derecha: ${esc(lados("derecha"))}.${medios.source ? ` Clasificación: ${esc(medios.source)}.` : ""}
        Los titulares vienen de Google News, que los atribuye a cada medio; el modelo solo elige cuáles y propone la pregunta.`
     : `<span class="pendiente">Falta la lista de medios.</span> Define al menos un medio de izquierda y uno de derecha
@@ -296,9 +303,9 @@ document.getElementById("borradores").addEventListener("click", async e => {
 
 api("/api/info").then(i => {
   info = i;
+  document.getElementById("url").textContent = location.host;
   document.getElementById("info").textContent =
-    `Oráculo: ${i.oracle} (${i.model}) · infraestructura: ${i.infra} · revisión ${i.revision} · ` +
-    `audiencia en ${location.origin}`;
+    `Oráculo: ${i.oracle} (${i.model}) · infraestructura: ${i.infra} · revisión ${i.revision}`;
   const ponente = esPonente(i);
   document.getElementById("sin-clave").hidden = ponente;
   if (ponente && i.room_code_required) {

@@ -1,29 +1,30 @@
 // Utilidades compartidas por la vista de la audiencia y la de proyección.
 
+// Textos para quien no conoce el proyecto: qué es la pregunta y quién la decide, sin jerga.
 const TIPOS = {
   presente: {
-    etiqueta: "Ya ocurrió",
-    mide: "La respuesta ya existe y es verificable. Nadie aquí la sabe con certeza: el precio agrega lo que la sala sabe en conjunto.",
+    etiqueta: "Ya pasó",
+    mide: "La respuesta ya existe. ¿La sala la sabe sin buscarla? Al final, la IA la busca en internet.",
   },
   futuro: {
-    etiqueta: "Aún no tiene respuesta",
-    mide: "Hoy es irresoluble a propósito. Lo correcto es que el oráculo diga SIN RESOLVER.",
+    etiqueta: "Todavía no se sabe",
+    mide: "Hoy nadie puede saberlo. Si la IA es honesta, dirá «todavía no se sabe».",
   },
   sala: {
-    etiqueta: "Información de la sala",
-    mide: "La respuesta está repartida entre ustedes y ningún buscador la tiene. La resuelve un censo privado, no el oráculo.",
+    etiqueta: "Sobre ustedes",
+    mide: "Solo ustedes tienen la respuesta. Se decide con una encuesta privada, no con la IA.",
   },
   simulacion: {
     etiqueta: "Nube simulada",
-    mide: "Nadie sabe qué harán los agentes: el comportamiento es emergente. La resuelve el código de la simulación, no un modelo ni la sala.",
+    mide: "La decide una simulación: nadie sabe de antemano qué harán sus agentes.",
   },
   noticias: {
-    etiqueta: "Desde las noticias",
-    mide: "Nació de las noticias del día. Cuatro agentes leen la cobertura según su dieta de medios y apuestan aquí; la sala apuesta con ellos. La resuelve el oráculo cuando llegue la fecha del criterio.",
+    etiqueta: "De las noticias",
+    mide: "Sale de los titulares de hoy. Cuatro bots leen medios distintos y también apuestan. La IA la decide cuando llegue la fecha.",
   },
   real: {
-    etiqueta: "Nube real · Cloud Run",
-    mide: "Se resuelve con lo que pase de verdad en Google Cloud y mide el código: una falla y su reparación cronometradas, o agentes que evolucionan vendiendo peticiones reales.",
+    etiqueta: "Nube real",
+    mide: "La decide lo que pase de verdad en Google Cloud, medido con cronómetro.",
   },
 };
 
@@ -39,7 +40,34 @@ function ordenar(mercados) {
   return [...noticias, ...mercados.filter(m => !m.topic)];
 }
 
-const RESULTADO = { YES: "SÍ", NO: "NO", UNRESOLVED: "SIN RESOLVER" };
+const RESULTADO = { YES: "SÍ", NO: "NO", UNRESOLVED: "AÚN NO SE SABE" };
+
+// Barra partida SÍ/NO: lo que cree la sala, legible de un vistazo y desde lejos.
+function barra(p) {
+  const si = Math.round(p * 100);
+  return `<div class="barra" role="img" aria-label="La sala cree ${si} % SÍ y ${100 - si} % NO">
+    <span class="barra-si" style="width:${si}%">${si >= 12 ? `SÍ ${si} %` : ""}</span>
+    <span class="barra-no" style="width:${100 - si}%">${100 - si >= 12 ? `NO ${100 - si} %` : ""}</span>
+  </div>`;
+}
+
+// Por qué no hubo respuesta, en palabras. Las líneas «política: …» las escribe AcceptancePolicy;
+// el censo y la nube ya explican su motivo en `reasoning`.
+function motivo(m) {
+  const v = m.oracle;
+  if (m.resolver === "censo") return `Hacen falta más respuestas a la encuesta privada (${m.census_count} hasta ahora).`;
+  if (m.resolver !== "oráculo" && m.resolver) return esc(v.reasoning);
+  const politica = v.trace.find(t => t.startsWith("política:") && t.includes("→ UNRESOLVED")) || "";
+  const fuentes = [...new Set(v.evidence.map(e => e.domain))];
+  if (politica.includes("dominio")) {
+    return `La IA creía saberlo, pero solo encontró ${fuentes.length || "una"} fuente` +
+      `${fuentes.length ? ` (${esc(fuentes.join(", "))})` : ""} y pedimos al menos dos distintas.`;
+  }
+  if (politica.includes("confianza")) return "La IA no estaba lo bastante segura, así que no lo damos por cerrado.";
+  if (v.trace.some(t => t.includes("fail-closed"))) return "No pudimos leer la respuesta de la IA. Ante la duda, no decidimos.";
+  if (v.trace.some(t => t.startsWith("política de encuadre") && t.includes("→ UNRESOLVED"))) return "La IA cambió de opinión según el titular que leyó, así que no le creemos.";
+  return "La IA no encontró pruebas suficientes: puede que todavía no haya pasado.";
+}
 
 const FALLOS = {
   baja_confianza: "Baja confianza",

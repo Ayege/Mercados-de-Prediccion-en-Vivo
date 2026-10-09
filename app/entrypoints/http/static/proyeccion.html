@@ -11,41 +11,59 @@
   .tarjeta { margin: 0; display: flex; flex-direction: column; gap: .4rem; }
   .grande { font-size: 3rem; line-height: 1; }
   .mide { font-size: .9rem; }
-  .contraste { font-size: 1.15rem; border-top: 1px solid var(--borde); padding-top: .6rem; margin-top: .4rem; }
   .traza { font: .8rem/1.5 ui-monospace, Menlo, monospace; margin: 0; padding-left: 1.1rem; }
   .intentos { list-style: none; padding: 0; margin: 0; font-size: .85rem; }
   .intentos li { padding: .15rem 0; }
   .agentes { border-top: 1px solid var(--borde); padding-top: .5rem; }
-  .sala { font-size: 1.3rem; } .sala strong { font-size: 2.2rem; letter-spacing: .25em; font-family: ui-monospace, Menlo, monospace; }
+  .entrar { text-align: center; font-size: 1.3rem; }
+  .entrar .url { font-size: 1.6rem; word-break: break-all; }
+  .sala strong { font-size: 2.2rem; letter-spacing: .25em; font-family: ui-monospace, Menlo, monospace; }
+  .veredicto { font-size: 1.15rem; border-radius: 10px; padding: .6rem .8rem; background: var(--chip); margin-top: .4rem; }
   .agente-fila { padding: .45rem 0; border-bottom: 1px dashed var(--borde); }
   .borrador { border-top: 1px dashed var(--borde); padding-top: .6rem; margin-top: .6rem; }
   .encuadre { border-top: 1px solid var(--borde); padding-top: .5rem; }
   .ponente { border-top: 1px dashed var(--borde); padding-top: .6rem; margin-top: auto; }
   .pie { margin-top: 1.5rem; }
+  #lista > h2 { margin: 1.5rem 0 .2rem; }
+  #lista > h2.secundario { font-size: 1.1rem; color: var(--tenue); margin-top: 2.5rem; }
+  #lista > p { margin-bottom: .8rem; }
+  .destacada { border-left: 4px solid var(--acento); }
+  .destacada .pregunta { font-size: 1.5rem; line-height: 1.3; }
+  .destacada .barra { height: 2.8rem; font-size: 1.1rem; }
+  .destacada .veredicto { font-size: 1.35rem; }
+  .compacta { grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
 </style>
 </head>
 <body>
 <main>
   <h1>Oráculo</h1>
-  <p class="tenue">Dos formas de conocer, lado a lado. El mercado agrega creencia; el oráculo recupera evidencia.
-    Y el código decide si esa evidencia alcanza. En las preguntas con encuadre, también se ve cuánto mueve un
-    titular a la sala y al modelo.</p>
-  <p class="tenue pequeno" id="info"></p>
-  <p class="sala" id="sala" hidden>Para entrar desde el móvil, código de la sala: <strong></strong></p>
+  <p class="lema">¿Cuánto sabe esta sala sin buscar en Google? Ustedes apuestan; una IA busca la respuesta.</p>
+  <section class="entrar tarjeta">
+    <p>Entra desde tu móvil: <strong class="url" id="url"></strong></p>
+    <p class="sala" id="sala" hidden>Código de la sala: <strong></strong></p>
+  </section>
+  <ol class="pasos">
+    <li><strong>Ustedes apuestan</strong> SÍ o NO desde el móvil. La barra muestra lo que cree la sala.</li>
+    <li><strong>Una IA busca</strong> la respuesta en internet y trae sus fuentes.</li>
+    <li><strong>El código decide</strong> si esas pruebas alcanzan. Si no, dice «aún no se sabe».</li>
+  </ol>
   <p class="error" id="error" role="alert"></p>
   <section class="tarjeta" id="noticias" hidden>
-    <h2 style="margin-top:0">Pregunta desde las noticias</h2>
-    <p class="pequeno tenue" id="medios"></p>
+    <h2 style="margin-top:0">Crear una pregunta desde las noticias</h2>
     <form class="fila" id="buscar-noticias">
-      <input id="tema" maxlength="80" minlength="3" required placeholder="Tema, por ejemplo: tasa de interés"
+      <input id="tema" maxlength="80" minlength="3" required placeholder="Escribe un tema, por ejemplo: tasa de interés"
         aria-label="Tema de las noticias">
       <button>Buscar noticias</button>
     </form>
+    <details class="pequeno"><summary>¿De dónde salen los titulares?</summary><p class="tenue" id="medios"></p></details>
     <div id="borradores"></div>
   </section>
-  <div class="rejilla" id="lista"></div>
-  <p class="pie tenue pequeno">Esto muestra cómo funciona un mecanismo de agregación. Con esta sala, dinero ficticio
-    y unos minutos, no sirve como prueba de la sabiduría de las multitudes.</p>
+  <div id="lista"></div>
+  <details class="pie pequeno"><summary>Detalles técnicos</summary>
+    <p class="tenue" id="info"></p>
+    <p class="tenue">Es una demostración: con esta sala, dinero ficticio y unos minutos, no prueba la sabiduría
+      de las multitudes.</p>
+  </details>
   <p class="pie tenue pequeno" id="sin-clave" hidden>Los controles del ponente están ocultos: abre esta página
     con <code>#clave=TU_CLAVE</code> al final de la URL.</p>
 </main>

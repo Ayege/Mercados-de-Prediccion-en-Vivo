@@ -24,6 +24,14 @@ def attempt_view(a: Attempt) -> dict:
     }
 
 
+def check_view(m: Market) -> dict | None:
+    """La última consulta en corto: lo que creía la sala y qué se encontró. Es lo que ve un móvil."""
+    a = m.last_attempt
+    if a is None:
+        return None
+    return {"outcome": a.verdict.outcome, "price_yes": a.price_yes, "sources": len(a.verdict.domains)}
+
+
 def headline_view(h: Headline | None) -> dict | None:
     return None if h is None else {"text": h.text, "source": h.source, "url": h.url}
 
@@ -93,6 +101,7 @@ def market_view(m: Market) -> dict:
         "coverage": [article_view(a) for a in m.news.articles] if m.news else [],
         "agents": [agent_read_view(r, m.outcome) for r in m.news.reads] if m.news else [],
         "agents_reading": bool(m.news and m.news.reading),
+        "check": check_view(m),
     }
 
 
@@ -100,7 +109,7 @@ def market_summary(m: Market) -> dict:
     """Lo que pinta un móvil. Sin historial ni trazas: cada móvil lo pide cada pocos segundos."""
     return {"id": m.id, "question": m.question, "criteria": m.criteria, "kind": m.kind,
             "resolver": m.resolver, "topic": m.news.topic if m.news else None, "prices": m.prices(),
-            "status": m.status, "outcome": m.outcome}
+            "status": m.status, "outcome": m.outcome, "check": check_view(m)}
 
 
 def account_view(a: Account) -> dict:

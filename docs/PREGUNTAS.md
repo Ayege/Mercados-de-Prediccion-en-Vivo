@@ -62,7 +62,7 @@ producción, ver [Cambiar las preguntas](DESPLIEGUE.md#cambiar-las-preguntas).
 
 ## Fallos del oráculo
 
-La proyección tiene un selector de fallos junto a «Consultar al oráculo». Sirven
+La proyección tiene un selector de fallos («Modo demo») junto a «Preguntar a la IA». Sirven
 para ver al código rechazar un veredicto:
 
 | Fallo | Qué simula | Qué lo rechaza |

@@ -61,7 +61,7 @@ curl -X POST $URL/api/markets -H "X-Presenter-Key: $PRESENTER_KEY" -H 'Content-T
 
 ## 2. El oráculo, puesto a prueba con los titulares
 
-En una pregunta con encuadre, «Consultar al oráculo» hace tres consultas: sin
+En una pregunta con encuadre, «Preguntar a la IA» hace tres consultas: sin
 titular, con el pro-SÍ y con el pro-NO. `FramingPolicy` acepta el veredicto solo
 si las tres coinciden. Si el modelo cambia de opinión con el titular, queda SIN
 RESOLVER, porque los hechos eran los mismos.
@@ -95,7 +95,7 @@ el ponente escribe un tema en «Pregunta desde las noticias».
    un criterio, un tipo y al menos un titular de cada lado. Si falta algo, el
    borrador queda rechazado con su traza y se busca otra vez.
 4. **El ponente abre la pregunta.** La sala apuesta como en cualquier otra.
-5. **«Que opinen los agentes».** Cuatro agentes Gemini leen la misma cobertura,
+5. **«Que apuesten los bots».** Cuatro agentes Gemini leen la misma cobertura,
    cada uno solo lo que su dieta permite: solo izquierda, solo derecha, ambas o
    ninguna. No buscan en internet. Los titulares les llegan escapados, como dato,
    para que uno que diga «</titular>» no pueda salirse de su etiqueta. Cada uno

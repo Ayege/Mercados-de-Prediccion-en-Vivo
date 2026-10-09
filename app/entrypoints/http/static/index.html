@@ -9,31 +9,35 @@
 <body>
 <main>
   <h1>Oráculo</h1>
-  <p class="tenue">Compra SÍ o NO. El precio es la probabilidad que la sala le asigna en este momento.
-    El dinero es ficticio: empiezas con 1000 créditos y cada acción ganadora paga 1.</p>
+  <p class="lema">¿Cuánto sabe esta sala sin buscar en Google? Apuesta y lo vemos.</p>
 
   <form id="ingreso" class="tarjeta fila">
-    <label for="nombre">Tu nombre</label>
+    <label for="codigo" id="codigo-etiqueta" hidden>Código de la sala <span class="tenue pequeno">(está en la pantalla grande)</span></label>
+    <input id="codigo" maxlength="12" autocomplete="off" autocapitalize="characters" hidden>
+    <label for="nombre">Tu nombre o un apodo</label>
     <input id="nombre" maxlength="24" required autocomplete="nickname"
       title="Letras, números, espacio, punto, guion o guion bajo">
-    <label for="codigo" id="codigo-etiqueta" hidden>Código de la sala</label>
-    <input id="codigo" maxlength="12" autocomplete="off" autocapitalize="characters" hidden
-      title="Está en la pantalla del proyector">
     <button>Entrar</button>
-    <p class="pequeno tenue">Sin cuenta ni contraseña: el nombre solo agrupa tus
-      apuestas. No uses datos personales.</p>
+    <p class="pequeno tenue">Sin cuenta ni contraseña. No uses datos personales.</p>
     <p class="error pequeno" id="error-ingreso" role="alert"></p>
   </form>
 
+  <ol class="pasos pequeno" id="como">
+    <li>Lee la pregunta.</li>
+    <li>Apuesta a SÍ o NO con créditos de mentira. Empiezas con 1000.</li>
+    <li>Al final, una IA busca la respuesta. Si acertaste, ganas créditos.</li>
+  </ol>
+
   <section id="panel" hidden>
-    <p><strong id="quien"></strong> · saldo <span class="precio" id="saldo"></span> créditos</p>
-    <p class="aviso pequeno">Por favor, no lo busques. Lo interesante es ver qué sabe la sala sin buscador;
-      el oráculo se encarga de buscar.</p>
-    <p class="aviso pequeno" id="demanda" hidden>Tu móvil es demanda real: mientras tienes esta página en pantalla, cada
-      vez que consulta el mercado cuenta como tráfico. Con él, la nube decide cuántos servidores encender en Google Cloud, y los agentes
-      del mercado real compiten por venderlo con precios reales de Cloud Run.</p>
+    <div class="cabecera">
+      <p><strong id="quien"></strong></p>
+      <p>Tienes <span class="precio" id="saldo"></span> créditos</p>
+    </div>
+    <p class="aviso pequeno">No lo busques en el móvil: la gracia es ver qué sabe la sala por sí sola.</p>
+    <p class="pequeno tenue" id="demanda" hidden>Dato curioso: mientras tienes esta página abierta, tu móvil es
+      tráfico real para la demo de la nube.</p>
     <p class="error" id="error" role="alert"></p>
-    <p class="pequeno si" id="hecho" role="status"></p>
+    <p class="si" id="hecho" role="status"></p>
     <div id="lista"></div>
   </section>
 </main>

@@ -31,33 +31,60 @@ function salir(motivo) {
   document.getElementById("nombre").value = usuario;
   document.getElementById("panel").hidden = true;
   document.getElementById("ingreso").hidden = false;
+  document.getElementById("como").hidden = false;
   document.getElementById("error-ingreso").textContent = motivo;
 }
 
 const conToken = (extra = {}) => ({ "X-User-Token": token, ...extra });
 
-function posicion(u, id) {
-  const p = u.positions[id];
+// Lo que tienes en juego, en créditos: cada acción ganadora paga 1.
+function posicion(u, m) {
+  const p = u.positions[m.id];
   if (!p || (p.YES < 0.01 && p.NO < 0.01)) return "";
-  return `<p class="pequeno tenue">Tienes ${p.YES.toFixed(1)} acciones SÍ · ${p.NO.toFixed(1)} acciones NO</p>`;
+  if (m.status !== "open") {
+    const premio = p[m.outcome];
+    return premio >= 0.01
+      ? `<p class="resultado"><strong class="si">¡Acertaste!</strong> Recibiste ${premio.toFixed(0)} créditos.</p>`
+      : `<p class="resultado">Esta vez no acertaste.</p>`;
+  }
+  const lados = ["YES", "NO"].filter(k => p[k] >= 0.01)
+    .map(k => `si sale <strong class="${k === "YES" ? "si" : "no"}">${RESULTADO[k]}</strong>, recibes ${p[k].toFixed(0)} créditos`);
+  return `<p class="pequeno">Tu apuesta: ${lados.join("; ")}.</p>`;
+}
+
+// La revelación: lo que creía la sala frente a lo que encontró quien decide.
+function revelacion(m) {
+  const c = m.check;
+  if (!c) return "";
+  const sala = `La sala creía ${pct(c.price_yes)} SÍ`;
+  if (c.outcome === "UNRESOLVED") {
+    return `<p class="resultado pequeno"><strong class="pendiente">La IA buscó y dijo: aún no se sabe.</strong>
+      No encontró pruebas suficientes, así que no adivina. Puedes seguir apostando.</p>`;
+  }
+  const quien = m.resolver === "oráculo" ? `la IA lo comprobó con ${c.sources} fuente(s)` : "y así fue";
+  const acerto = Math.abs(c.price_yes - 0.5) < 0.02 ? ""
+    : (c.outcome === "YES") === (c.price_yes > 0.5) ? " <strong>La sala acertó.</strong>" : " <strong>La sala se equivocó.</strong>";
+  return `<p class="pequeno">${sala}; ${quien}.${acerto}</p>`;
 }
 
 function controles(m) {
   if (m.status !== "open") {
-    return `<p>Resuelto: <strong class="${m.outcome === "YES" ? "si" : "no"}">${RESULTADO[m.outcome]}</strong></p>`;
+    return `<p class="resultado">Salió <strong class="grande-txt ${m.outcome === "YES" ? "si" : "no"}">${RESULTADO[m.outcome]}</strong></p>
+      ${revelacion(m)}`;
   }
-  const operar = `<div class="fila">
-      <button class="si" data-operar="YES" data-id="${m.id}">Comprar SÍ</button>
-      <button class="no" data-operar="NO" data-id="${m.id}">Comprar NO</button>
+  const operar = `<div class="apostar">
+      <button class="si" data-operar="YES" data-id="${m.id}">SÍ</button>
+      <button class="no" data-operar="NO" data-id="${m.id}">NO</button>
     </div>`;
   if (m.kind !== "sala") return operar;
   const censo = respondidos.has(m.id)
-    ? `<p class="pequeno tenue">Ya respondiste el censo. Tu respuesta es privada.</p>`
-    : `<p class="pequeno">Censo privado: ¿y tú? Responde la verdad sobre ti; no se publica quién dijo qué.</p>
+    ? `<p class="pequeno tenue">Ya respondiste la encuesta privada. Nadie ve qué contestaste.</p>`
+    : `<p class="pequeno"><strong>Encuesta privada:</strong> ¿y tú? Contesta la verdad sobre ti. Nadie verá qué dijiste.</p>
        <div class="fila">
-         <button data-censo="true" data-id="${m.id}">Sí, yo sí</button>
+         <button data-censo="true" data-id="${m.id}">Yo sí</button>
          <button data-censo="false" data-id="${m.id}">Yo no</button>
-       </div>`;
+       </div>
+       <p class="pequeno tenue">Y ahora apuesta: ¿qué dirá la mayoría?</p>`;
   return censo + operar;
 }
 
@@ -73,24 +100,27 @@ async function pintar() {
     if (err.status === 401) salir("La sala se reinició y tu sesión ya no vale: vuelve a entrar con el código de la pantalla.");
     throw err;
   }
-  document.getElementById("quien").textContent = u.name;
+  document.getElementById("quien").textContent = `Hola, ${u.name}`;
   document.getElementById("saldo").textContent = u.balance.toFixed(0);
-  pintarSi(document.getElementById("lista"), `
-    <div class="fila pequeno">Monto por orden:
+  const abiertas = mercados.some(m => m.status === "open");
+  pintarSi(document.getElementById("lista"), (abiertas ? `
+    <div class="montos pequeno">Cuánto apuestas cada vez:
       ${[10, 50, 100, 250].map(n =>
-        `<button data-monto="${n}" ${n === monto ? "disabled" : ""}>${n}</button>`).join("")}
-    </div>` + (mercados.length ? "" : `<p class="tenue">Todavía no hay preguntas abiertas. Aparecerán aquí solas.</p>`)
+        `<button data-monto="${n}" aria-pressed="${n === monto}">${n}</button>`).join("")}
+    </div>` : "") + (mercados.length ? "" : `<p class="tenue">Todavía no hay preguntas. Aparecerán aquí solas en cuanto
+      se abra la primera.</p>`)
     + ordenar(mercados).map(m => `
     <article class="tarjeta">
       <span class="chip">${esc(tipo(m).etiqueta)}</span>
-      ${titular(u.headlines?.[m.id], "Titular que te tocó: la sala ve dos titulares distintos y se revelan al final")}
+      ${titular(u.headlines?.[m.id], "Tu titular (otras personas leen uno distinto; se revela al final)")}
       <p class="pregunta">${esc(m.question)}</p>
-      <p class="pequeno tenue">${esc(m.criteria)}</p>
-      ${m.kind === "simulacion" ? `<p class="pequeno tenue">${esc(tipo(m).mide)}</p>` : ""}
-      <p class="precio"><span class="si">SÍ ${pct(m.prices.YES)}</span> ·
-        <span class="no">NO ${pct(m.prices.NO)}</span></p>
+      <p class="pequeno tenue" style="margin:0">La sala cree:</p>
+      ${barra(m.prices.YES)}
+      ${m.status === "open" ? revelacion(m) : ""}
       ${controles(m)}
-      ${posicion(u, m.id)}
+      ${posicion(u, m)}
+      <details class="pequeno"><summary>¿Cómo se decide?</summary>
+        <p>${esc(m.criteria)}</p><p class="tenue">${esc(tipo(m).mide)}</p></details>
     </article>`).join(""));
 }
 
@@ -110,8 +140,8 @@ document.getElementById("lista").addEventListener("click", async e => {
         headers: conToken({ "Content-Type": "application/json" }),
         body: JSON.stringify({ user: usuario, outcome: b.dataset.operar, amount: monto }),
       });
-      hecho.textContent = `Compraste ${r.shares.toFixed(1)} acciones de ${RESULTADO[b.dataset.operar]} por ${monto}. ` +
-        `El SÍ quedó en ${pct(r.market.prices.YES)}.`;
+      hecho.textContent = `Listo: apostaste ${monto} a ${RESULTADO[b.dataset.operar]}. ` +
+        `Si aciertas, recibes ${r.shares.toFixed(0)}. Ahora la sala cree ${pct(r.market.prices.YES)} SÍ.`;
     } else if (b.dataset.censo) {
       try {
         await api(`/api/markets/${b.dataset.id}/census`, {
@@ -142,6 +172,7 @@ api("/api/info").then(i => {
 function arrancar() {
   if (!usuario || !token) return;
   document.getElementById("ingreso").hidden = true;
+  document.getElementById("como").hidden = true;
   document.getElementById("panel").hidden = false;
   document.getElementById("error-ingreso").textContent = "";
   if (sondeando) {
