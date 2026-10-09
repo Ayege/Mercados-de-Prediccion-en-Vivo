@@ -222,7 +222,8 @@ def test_every_seed_set_opens_at_even_odds(seed_set, count, monkeypatch):
 def test_oracle_seed_set_has_one_unresolvable_question(monkeypatch):
     monkeypatch.setenv("SEED_SET", "oraculo")
     c = app_with(with_seed=True)
-    assert sorted(m["kind"] for m in c.get("/api/markets").json()) == ["futuro", "presente", "presente", "presente"]
+    kinds = sorted(m["kind"] for m in c.get("/api/markets").json())
+    assert kinds == ["futuro", "presente", "presente", "presente"]
 
 
 # --- nube simulada ---------------------------------------------------------------
