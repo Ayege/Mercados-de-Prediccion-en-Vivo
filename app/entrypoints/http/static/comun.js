@@ -23,7 +23,7 @@ const TIPOS = {
   },
   real: {
     etiqueta: "Nube real · Cloud Run",
-    mide: "Se resuelve con lo que pase de verdad en Google Cloud: una falla real, un detector real y una reparación real, cronometrados.",
+    mide: "Se resuelve con lo que pase de verdad en Google Cloud y mide el código: una falla y su reparación cronometradas, o agentes que evolucionan vendiendo peticiones reales.",
   },
 };
 

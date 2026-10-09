@@ -52,10 +52,12 @@ app/
 │   ├── real_market.py   RealMarket: subasta la demanda real, envía trabajo, liquida, evoluciona
 │   ├── limits.py        Límites de ritmo contra abuso
 │   ├── ports.py         OracleGateway (con OracleQuery), Repository, NewsDesk, NewsReader, …
+│   ├── persistence.py   Persistence: cuándo guardar la foto del estado y cómo restaurarla
 │   ├── views.py         Lo que sale de un caso de uso (dicts planos)
 │   └── errors.py        NotFound, Cooldown, …
 ├── adapters/            Implementaciones de los puertos.
 │   ├── memory.py        Repository en memoria, con lock
+│   ├── state.py         La foto del estado: firmada (HMAC) y guardada en Cloud Storage
 │   ├── google_auth.py   Credenciales por defecto y tokens de identidad
 │   ├── vertex_client.py generateContent, compartido
 │   ├── prompt.py        Escapa el texto de terceros antes de meterlo en un prompt
@@ -228,9 +230,13 @@ para ensayar en local y para los tests.
 las políticas. El dominio recibe números. La única excepción es
 `ORACLE_MOCK_FORCE`, que el simulado lee en cada llamada.
 
-**El estado vive en memoria.** No hay base de datos y el servicio corre con
-`max-instances=1`: el mercado dura 40 minutos. Para sobrevivir a un reinicio
-bastaría un adaptador de Firestore que implemente `Repository`.
+**El estado vive en memoria, con una foto fuera.** No hay base de datos y el
+servicio corre con `max-instances=1`. Para sobrevivir a que la API escale a cero,
+`Persistence` guarda una foto entera (mercados, cuentas, código de sala,
+borradores, simulación e historial de la nube real) en Cloud Storage: como mucho
+una cada 5 s tras un cambio, y al apagarse. Es más barato que un repositorio
+remoto, que haría una escritura por orden. La foto va firmada con HMAC y atada a
+la huella del código: si no coincide o tiene más de 12 h, se empieza de cero.
 
 **Nada corre en segundo plano.** El laboratorio calcula en cada petición los
 ticks que tocan, hasta 50. El controlador de infraestructura corre un ciclo

@@ -84,11 +84,11 @@ ensayar, incluida la infraestructura simulada, en
 
 ![Diagrama de contexto](docs/c4-nivel1-contexto.png)
 
-## Pendiente
+## Ya resuelto
 
-- Conectar el trigger de Cloud Build al repositorio de GitHub.
-- Persistir el estado si tuviera que sobrevivir a que la API escale a cero.
-- Una pregunta de cooperación resuelta por el mercado real (4 agentes), además
-  de la simulada.
-- Medios dominicanos en la lista, cuando haya una clasificación publicada que se
-  pueda citar.
+- Cada push a `master` publica a través del pipeline: un trigger de Cloud Build
+  conectado al repositorio de GitHub.
+- La sala sobrevive a que la API escale a cero: una foto firmada del estado en
+  Cloud Storage (ver [Despliegue](docs/DESPLIEGUE.md#el-estado-sobrevive-a-la-escala-a-cero)).
+- Una pregunta de cooperación que resuelve el mercado real (4 agentes), además de
+  la simulada.

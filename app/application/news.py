@@ -43,6 +43,14 @@ class NewsService:
         self._drafts_lock = threading.Lock()  # abrir y descartar son «revisar y cambiar»
         self._last_search = -cooldown
 
+    def snapshot(self) -> dict:
+        with self._drafts_lock:
+            return {"drafts": dict(self.drafts)}
+
+    def restore(self, state: dict) -> None:
+        with self._drafts_lock:
+            self.drafts = dict(state["drafts"])
+
     def view(self) -> dict:
         with self._drafts_lock:
             drafts = [draft_view(d) for d in reversed(self.drafts.values())]

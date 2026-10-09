@@ -44,6 +44,9 @@ class Settings:
     media_file: str = DEFAULT_MEDIA  # la lista de medios y su inclinación, definida por el ponente
     agent_budget: float = 200.0  # créditos que arriesga cada agente de noticias por pregunta
     room_code: str = "auto"  # «auto»: se genera al arrancar; vacío: sin código (solo en local)
+    state_bucket: str = ""  # bucket de Cloud Storage para la foto del estado; vacío: solo en memoria
+    state_every: float = 5.0  # como mucho una foto cada tantos segundos
+    state_max_hours: float = 12.0  # una foto más vieja es de otra sesión: se empieza de cero
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -81,6 +84,9 @@ class Settings:
             media_file=env.get("MEDIOS_ARCHIVO", DEFAULT_MEDIA),
             agent_budget=float(env.get("AGENTES_PRESUPUESTO", "200")),
             room_code=env.get("SALA_CODIGO", "auto"),
+            state_bucket=env.get("ESTADO_BUCKET", ""),
+            state_every=float(env.get("ESTADO_CADA_SEGUNDOS", "5")),
+            state_max_hours=float(env.get("ESTADO_MAX_HORAS", "12")),
         )
 
     def check(self) -> None:
@@ -99,6 +105,9 @@ class Settings:
         if self.production and self.infra_mode != "real":
             raise RuntimeError("En producción todo es real: INFRA_MODE debe ser «real» "
                                f"(está en «{self.infra_mode}»)")
+        if self.state_bucket and len(self.presenter_key) < 32:
+            raise RuntimeError("ESTADO_BUCKET necesita PRESENTER_KEY de al menos 32 caracteres: con ella "
+                               "se firma la foto del estado")
         if self.infra_mode == "real" and self.vigil_account and not self.vigil_audience:
             raise RuntimeError("VIGILIA_CUENTA necesita VIGILIA_AUDIENCIA (la URL de la vigilia)")
 

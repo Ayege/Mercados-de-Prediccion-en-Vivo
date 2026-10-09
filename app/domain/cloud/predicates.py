@@ -9,5 +9,7 @@ SIMULATED = {
 REAL = {
     "autorreparacion_real": "La primera falla inyectada en un nodo real de Cloud Run queda reparada "
                             "en menos de 120 segundos.",
+    "cooperacion_real": "Al cerrar la generación 3 del mercado real, la cooperación media de los agentes "
+                        "es mayor que al empezar.",
 }
 PREDICATES = SIMULATED | REAL

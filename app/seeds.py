@@ -89,6 +89,14 @@ AUTORREPARACION_REAL = (
     "simulacion",
     "autorreparacion_real",
 )
+COOPERACION_REAL = (
+    "¿Al cerrar la generación 3, los 4 agentes del mercado real cooperarán más que al empezar?",
+    "Lo resuelve el mercado real: cooperación media de los genomas de la generación 3 contra la "
+    "inicial. Solo gana quien atiende a tiempo peticiones reales en Cloud Run, y las coaliciones de "
+    "dos regiones se pagan solo si cumplen.",
+    "simulacion",
+    "cooperacion_real",
+)
 SEEDS = {
     # Creencia contra evidencia, y el sistema negándose a responder.
     "oraculo": [KUBERNETES, PYTHON, DOLAR],
@@ -99,10 +107,10 @@ SEEDS = {
     # La nube autónoma: la sala apuesta sobre lo que harán los agentes.
     "nube": [COOPERACION, AUTORREPARACION, TOPOLOGIA, CREDULIDAD],
     # La nube autónoma actuando sobre Cloud Run de verdad (INFRA_MODE=real).
-    "nube_real": [COOPERACION, TOPOLOGIA, AUTORREPARACION_REAL, CREDULIDAD],
-    # Solo lo real: el oráculo con evidencia, el censo de la sala y un nodo real de Cloud Run.
-    # Es el único juego que acepta producción.
-    "real": [KUBERNETES, PYTHON, DOLAR, VIERNES, AUTORREPARACION_REAL],
+    "nube_real": [COOPERACION, TOPOLOGIA, AUTORREPARACION_REAL, COOPERACION_REAL, CREDULIDAD],
+    # Solo lo real: el oráculo con evidencia, el censo de la sala, un nodo real de Cloud Run y
+    # el mercado real de agentes. Es el único juego que acepta producción.
+    "real": [KUBERNETES, PYTHON, DOLAR, VIERNES, AUTORREPARACION_REAL, COOPERACION_REAL],
     # Encuadre: dos titulares, la sala dividida al azar, y el oráculo puesto a prueba con ambos.
     # La pregunta de la sala no lleva titular: es el grupo de control del mecanismo.
     "encuadre": [PYTHON_ENCUADRADO, KUBERNETES_ENCUADRADO, VIERNES],

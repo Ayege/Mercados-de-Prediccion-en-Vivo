@@ -37,10 +37,12 @@ from ..domain.cloud.real_market import (
     learn,
     settle,
 )
+from ..domain.verdict import Verdict
 from .ports import AgentGateway, PriceCatalog
 
 log = logging.getLogger("oraculo.mercado")
 REGIONS = ("us-east1", "us-central1", "europe-west1", "southamerica-east1", "northamerica-northeast1")
+COOPERATION_GENERATION = 3  # cada generación son 12 ciclos de 10 s: se resuelve en unos 6 minutos
 
 
 @dataclass
@@ -104,6 +106,7 @@ class RealMarket:
         self.notes: list[str] = []
         self.error = ""
         self.spend = 0.0  # USD reales gastados por el mercado (precios de lista)
+        self.initial_cooperation = self._mean_cooperation(a.genome.as_dict() for a in self.agents)
 
     # --- ciclo ------------------------------------------------------------------
     async def cycle(self, demand: int, active: bool) -> None:
@@ -214,6 +217,40 @@ class RealMarket:
         )
         self.generation += 1
         evolve(self.agents, self.rng, self.generation, self.budget)
+
+    # --- foto del estado ---------------------------------------------------------
+    PERSISTED = ("agents", "rng", "cycles", "generation", "trades", "contracts", "generations", "spend",
+                 "initial_cooperation")
+
+    def snapshot(self) -> dict:
+        """La evolución y sus cuentas. Los servicios reales no: se vuelven a leer de Cloud Run."""
+        return {k: getattr(self, k) for k in self.PERSISTED}
+
+    def restore(self, state: dict) -> None:
+        for k in self.PERSISTED:
+            setattr(self, k, state[k])
+
+    @staticmethod
+    def _mean_cooperation(genomes) -> float:
+        values = [g["cooperation"] for g in genomes]
+        return sum(values) / len(values)
+
+    def judge_cooperation(self, generation: int = COOPERATION_GENERATION) -> Verdict:
+        """¿La evolución con ganancia real premió cooperar? Compara los genomas que vivieron la
+        generación pedida con los del arranque. Hasta que esa generación cierre, no se resuelve."""
+        trace = [f"mercado real: {len(self.agents)} agentes, cooperación media al empezar "
+                 f"{self.initial_cooperation:.2f}"]
+        closed = next((g for g in self.generations if g.number == generation), None)
+        if closed is None:
+            why = f"la generación {generation} todavía no cerró (va la {self.generation})"
+            trace.append(f"{why} → UNRESOLVED")
+            return Verdict("UNRESOLVED", 0.0, why, model="mercado real", trace=trace)
+        now = self._mean_cooperation(a["genome"] for a in closed.agents)
+        outcome = "YES" if now > self.initial_cooperation else "NO"
+        why = (f"al cerrar la generación {generation}, cooperación media {now:.2f} "
+               f"contra {self.initial_cooperation:.2f} al empezar")
+        trace.append(f"{why} → {outcome}")
+        return Verdict(outcome, 1.0, why, model="mercado real", trace=trace)
 
     async def shutdown(self) -> list[str]:
         """Borra los servicios de todos los agentes. Siempre permitido."""

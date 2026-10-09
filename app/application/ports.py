@@ -73,6 +73,27 @@ class Repository(Protocol):
 
     def accounts(self) -> Iterable[Account]: ...
 
+    def replace(self, markets: Iterable[Market], accounts: Iterable[Account]) -> None:
+        """Cambia todo el contenido de una vez: para restaurar una foto del estado."""
+        ...
+
+
+class StateStore(Protocol):
+    """Dónde vive la foto del estado mientras la API duerme. Contrato: lanza si no puede."""
+
+    async def load(self) -> bytes | None: ...
+
+    async def save(self, blob: bytes) -> None: ...
+
+
+class StateCodec(Protocol):
+    """Convierte la foto en bytes y de vuelta. `loads` lanza ValueError si la foto no es
+    de este código, no está firmada con esta clave o es demasiado vieja."""
+
+    def dumps(self, state: dict, saved_at: float) -> bytes: ...
+
+    def loads(self, blob: bytes, now: float) -> dict: ...
+
 
 class SimulationJudge(Protocol):
     """Resuelve las preguntas `simulacion` a partir del estado de la nube simulada."""

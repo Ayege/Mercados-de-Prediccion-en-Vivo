@@ -44,13 +44,13 @@ noticias no se siembran: se crean en vivo desde la proyección.
 
 | `SEED_SET` | Preguntas |
 | --- | --- |
-| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala` y la autorreparación de un nodo real. **El único que acepta producción** |
+| `real` | Kubernetes, Python, USD/DOP, una pregunta `sala`, la autorreparación de un nodo real y la cooperación del mercado real (4 agentes). **El único que acepta producción** |
 | `oraculo` (default) | Kubernetes, Python (`presente`) y USD/DOP (`futuro`) |
 | `agregacion` | Tres preguntas `sala` sobre la práctica de quienes participan |
 | `mixta` | Python, USD/DOP y una pregunta `sala` |
 | `encuadre` | Python y Kubernetes con dos titulares cada una, más una `sala` de control |
 | `nube` | Cooperación, autorreparación, topología y credulidad (simuladas) |
-| `nube_real` | Cooperación, topología y credulidad (simuladas), más la autorreparación de un nodo real. Necesita `INFRA_MODE=real` |
+| `nube_real` | Cooperación, topología y credulidad (simuladas), más la autorreparación de un nodo real y la cooperación del mercado real. Necesita `INFRA_MODE=real` |
 
 **En producción todo es real.** La API no siembra ni deja crear preguntas que
 resuelva el laboratorio simulado, ni titulares sin el enlace `https` donde los

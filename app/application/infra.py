@@ -264,6 +264,21 @@ class InfraController:
                     entry.result = await self._apply(entry.action, now)
                     self.state.log.append(entry)
 
+    # --- foto del estado ---------------------------------------------------------
+    PERSISTED = ("state", "forecaster", "detectors", "streak", "last_change")
+
+    def snapshot(self) -> dict:
+        """Fallas, incidentes y lo aprendido. Ni `active` ni `last_seen`: al despertar, la
+        actuación vuelve a pausa y la vigilia puede borrar lo que quedó encendido."""
+        state = {k: getattr(self, k) for k in self.PERSISTED}
+        return state | {"market": self.market.snapshot() if self.market else None}
+
+    def restore(self, state: dict) -> None:
+        for k in self.PERSISTED:
+            setattr(self, k, state[k])
+        if self.market and state["market"]:
+            self.market.restore(state["market"])
+
     # --- costo ------------------------------------------------------------------
     def touch(self) -> None:
         """Alguien está mirando la proyección: la vigilia no apaga nada."""
@@ -298,6 +313,11 @@ class InfraController:
     def judge(self, predicate: str) -> Verdict:
         if predicate not in REAL:
             raise SimulationError(f"predicado desconocido: {predicate}")
+        if predicate == "cooperacion_real":
+            if self.market is None:
+                why = "el mercado real no está conectado"
+                return Verdict("UNRESOLVED", 0.0, why, model="mercado real", trace=[f"{why} → UNRESOLVED"])
+            return self.market.judge_cooperation()
         trace = [f"infraestructura {self.mode} ({self.gateway.name})"]
         first = self.state.faults[0] if self.state.faults else None
         if first is None or first.repaired is None:

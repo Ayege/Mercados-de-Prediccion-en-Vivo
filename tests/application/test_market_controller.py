@@ -80,3 +80,18 @@ def test_public_view_hides_market_errors():
     c, market, _, _ = setup()
     market.error = "403: permission denied on projects/x"
     assert "projects/x" not in str(c.view(detailed=False)["market"])
+
+
+def test_real_cooperation_is_judged_only_when_generation_3_closes():
+    c, market, gw, clock = setup(MarketBudget(generation_cycles=2))
+    assert c.judge("cooperacion_real").outcome == "UNRESOLVED"
+    c.set_active(True)
+    run(c, clock, 3)  # el primer ciclo solo crea los servicios
+    assert market.generation < 3 and c.judge("cooperacion_real").outcome == "UNRESOLVED"
+    for _ in range(20):
+        if market.generation > 3:
+            break
+        run(c, clock, 1)
+    verdict = c.judge("cooperacion_real")
+    assert verdict.outcome in ("YES", "NO") and verdict.model == "mercado real"
+    assert "generación 3" in verdict.reasoning

@@ -1,7 +1,8 @@
 """Repositorio en memoria. El mercado dura 40 minutos y corre en una sola instancia.
 
-Si tuviera que sobrevivir a un reinicio, este es el único archivo que cambia:
-un adaptador de Firestore que implemente el mismo puerto `Repository`.
+Para sobrevivir a que la API escale a cero no hace falta otro repositorio: una foto
+del estado se guarda fuera del proceso y se restaura al arrancar (ver
+`application/persistence.py`). Así no hay una escritura remota por cada orden.
 """
 from __future__ import annotations
 
@@ -40,3 +41,8 @@ class InMemoryRepository:
 
     def accounts(self) -> list[Account]:
         return list(self._accounts.values())
+
+    def replace(self, markets, accounts) -> None:
+        with self._lock:
+            self._markets = {m.id: m for m in markets}
+            self._accounts = {a.name: a for a in accounts}

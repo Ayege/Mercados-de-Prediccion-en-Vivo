@@ -86,7 +86,7 @@ C4Container
   Container_Boundary(sistema, "Proyecto de Google Cloud") {
     Container(web, "Pantallas", "HTML y JavaScript sin scripts en línea", "/, /proyeccion.html, /nube.html; CSP script-src 'self'")
     Container(api, "oraculo-api", "FastAPI en Cloud Run", "Controles de borde, mercado, simulación y controlador; escala a cero, máximo 1")
-    ContainerDb(estado, "Estado", "Memoria del proceso", "Mercados, cuentas (solo hashes de tokens) y simulación")
+    ContainerDb(estado, "Estado", "Memoria del proceso + foto en Cloud Storage", "Mercados, cuentas (solo hashes de tokens) y simulación; la foto firmada sobrevive a la escala a cero")
     Container(nodos, "oraculo-nodo-<región>", "Cloud Run privado, ¼ vCPU", "Topología desplegada: /salud; corren como oraculo-nodo, sin roles")
     Container(agentes, "oraculo-agente-<id>", "Cloud Run privado, ¼ vCPU", "Mercado real: /trabajo; mínimo 0, o 1 si el gen warm lo pide")
     ContainerDb(secreto, "Secret Manager", "oraculo-presenter-key", "Solo oraculo-run puede leerlo")

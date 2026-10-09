@@ -85,6 +85,14 @@ Con el tráfico de una sala, mantener una instancia caliente cuesta más de lo q
 se gana evitando arranques en frío, y la evolución suele descubrirlo. No está
 programado: es la economía real de Cloud Run.
 
+**La sala puede apostar sobre la cooperación real.** El gen `cooperation` decide
+si un agente se suma a una coalición de dos regiones, que solo cobra si cumple a
+tiempo con peticiones reales. La pregunta `cooperacion_real` (en los juegos `real`
+y `nube_real`) compara la cooperación media de los genomas de la generación 3
+con la del arranque: unos 6 minutos de mercado activo. Hasta que cierre esa
+generación queda SIN RESOLVER. Es la misma pregunta que la simulada, pero la
+selección la hace la ganancia medida en Cloud Run.
+
 ## Lo que el laboratorio enseña sin que nadie lo programe
 
 - **El margen se va a cero.** El Q-learning empuja los precios hacia el costo:

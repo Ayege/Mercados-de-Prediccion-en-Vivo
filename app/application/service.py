@@ -74,6 +74,17 @@ class MarketService:
     async def resolve(self, market_id: str, fault: str | None = None) -> dict:
         return await self.resolver.resolve(market_id, fault)
 
+    # --- foto del estado ------------------------------------------------------------
+    def snapshot(self) -> dict:
+        """Mercados, cuentas (con el hash de cada token) y el código de sala: con eso, los
+        móviles siguen funcionando después de que la API despierte."""
+        return {"markets": list(self.repo.markets()), "accounts": list(self.repo.accounts()),
+                "room_code": self.accounts.room_code}
+
+    def restore(self, state: dict) -> None:
+        self.repo.replace(state["markets"], state["accounts"])
+        self.accounts.room_code = state["room_code"]
+
     # --- lecturas ---------------------------------------------------------------
     def list(self, summary: bool = False) -> list[dict]:
         view = market_summary if summary else market_view

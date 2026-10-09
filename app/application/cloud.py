@@ -43,6 +43,16 @@ class CloudService:
             self.sim.tick()
         self._last = now if due > MAX_CATCHUP else self._last + due * self.tick_seconds
 
+    def snapshot(self) -> dict:
+        """La simulación entera: en producción importa la topología adoptada, que es la que
+        despliega el controlador de infraestructura."""
+        with self._lock:
+            return {"sim": self.sim, "running": self.running}
+
+    def restore(self, state: dict) -> None:
+        with self._lock:
+            self.sim, self.running, self._last = state["sim"], state["running"], self.clock()
+
     def view(self) -> dict:
         with self._lock:
             if not self.lab:  # la página solo pinta las topologías: no se serializa la simulación

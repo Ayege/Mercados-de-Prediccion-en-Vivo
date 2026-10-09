@@ -15,6 +15,9 @@ de una vez (ver SECURITY.md):
   que cualquiera mantenga vivos los nodos.
 - Solo cuenta como demanda real el tráfico de la audiencia autenticada.
 - Cada acción del ponente o de Cloud Scheduler deja una línea de auditoría.
+
+Si hay `persistence`, el arranque restaura la foto del estado, cada escritura la marca
+como pendiente y el apagado (SIGTERM de Cloud Run) la guarda.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ import logging
 import secrets
 import sys
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -34,6 +38,7 @@ from ...application.cloud import CloudService
 from ...application.errors import Conflict, Cooldown, NotFound, RateLimited, Unauthorized
 from ...application.infra import InfraController
 from ...application.news import NewsService
+from ...application.persistence import Persistence
 from ...application.ports import FAULTS, FRAMING_FAULTS
 from ...application.service import MarketService
 from ...domain.errors import MarketError, SimulationError
@@ -79,9 +84,18 @@ if not audit.handlers:
 
 def create_app(service: MarketService, cloud: CloudService, infra: InfraController | None = None,
                presenter_key: str = "", revision: str = "local", docs: bool = True,
-               scheduler_check: SchedulerCheck | None = None, news: NewsService | None = None) -> FastAPI:
+               scheduler_check: SchedulerCheck | None = None, news: NewsService | None = None,
+               persistence: Persistence | None = None) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        if persistence:
+            await persistence.restore()
+        yield
+        if persistence and persistence.dirty:
+            await persistence.save()
+
     app = FastAPI(title="Oráculo — mercados de predicción", docs_url="/api/docs" if docs else None,
-                  redoc_url=None, openapi_url="/openapi.json" if docs else None)
+                  redoc_url=None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
 
     @app.middleware("http")
     async def harden(request: Request, call_next):
@@ -99,6 +113,11 @@ def create_app(service: MarketService, cloud: CloudService, infra: InfraControll
                 "consulta": str(request.url.query)[:200], "estado": response.status_code,
                 "quien": "scheduler" if "authorization" in request.headers else "ponente",
             }, ensure_ascii=False))
+        # Cambió el estado: una escritura que salió bien, o un ciclo del controlador real.
+        changed = request.method != "GET" or (path == "/api/infra" and "x-presenter-key" in request.headers)
+        if persistence and path.startswith("/api/") and changed and response.status_code < 400:
+            persistence.touch()
+            await persistence.maybe_save()
         response.headers.update(SECURITY_HEADERS)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"

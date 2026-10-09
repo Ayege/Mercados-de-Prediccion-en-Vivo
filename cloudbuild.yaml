@@ -23,6 +23,8 @@ substitutions:
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
   # Producción solo acepta preguntas reales (ver docs/PREGUNTAS.md). Otra: --substitutions=_SEED_SET=oraculo
   _SEED_SET: real
+  # La foto del estado, para que la sala sobreviva a que la API escale a cero (ver docs/DESPLIEGUE.md).
+  _STATE_BUCKET: ${PROJECT_ID}-estado
 
 serviceAccount: projects/${PROJECT_ID}/serviceAccounts/oraculo-build@${PROJECT_ID}.iam.gserviceaccount.com
 
@@ -79,7 +81,7 @@ steps:
       - ${_SERVICE}
       - --image=${_IMAGE}
       - --region=${_REGION}
-      - --update-env-vars=NODO_IMAGEN=${_IMAGE},SEED_SET=${_SEED_SET}
+      - --update-env-vars=NODO_IMAGEN=${_IMAGE},SEED_SET=${_SEED_SET},ESTADO_BUCKET=${_STATE_BUCKET}
 
 images:
   - ${_IMAGE}

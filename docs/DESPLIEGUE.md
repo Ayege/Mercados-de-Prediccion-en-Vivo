@@ -34,8 +34,33 @@ gcloud run services update oraculo-api --region us-east1 --min-instances 1   # a
 gcloud run services update oraculo-api --region us-east1 --min-instances 0   # al terminar
 ```
 
-Con la escala a cero, el estado del mercado se pierde cuando la API duerme.
-Durante una sesión no pasa, porque los móviles la mantienen despierta.
+### El estado sobrevive a la escala a cero
+
+Cuando la API duerme, la sala no se pierde: con `ESTADO_BUCKET`, la API guarda una
+foto del estado en `gs://$PROJECT_ID-estado` (como mucho una cada 5 s tras un
+cambio, y al apagarse) y la restaura al despertar, con el mismo código de sala y
+las mismas sesiones de los móviles. La actuación sobre la nube real vuelve
+siempre en pausa.
+
+- **Costo:** un solo objeto en us-east1, dentro del nivel gratuito de Cloud
+  Storage. El bucket no tiene *soft delete*: si no, cada foto sobrescrita se
+  guardaría y cobraría 7 días.
+- **Se empieza de cero** si la foto tiene más de `ESTADO_MAX_HORAS` (12), si
+  cambió el código de `domain` o `application`, o si cambió `PRESENTER_KEY`, con
+  la que se firma.
+- **Para vaciar la sala a mano:** `gcloud storage rm gs://$PROJECT_ID-estado/estado/sala.bin`
+  y una revisión nueva (`gcloud run services update oraculo-api --region $REGION`).
+
+Una sola vez:
+
+```bash
+gcloud storage buckets create gs://$PROJECT_ID-estado --location $REGION \
+  --uniform-bucket-level-access --public-access-prevention --soft-delete-duration 0
+gcloud storage buckets add-iam-policy-binding gs://$PROJECT_ID-estado \
+  --member serviceAccount:oraculo-run@$PROJECT_ID.iam.gserviceaccount.com --role roles/storage.objectUser
+```
+
+`cloudbuild.yaml` fija `ESTADO_BUCKET` en cada despliegue.
 
 ## Una sola vez: proyecto, APIs e identidades
 
@@ -166,8 +191,8 @@ gcloud scheduler jobs create http oraculo-vigilia --location=$REGION --schedule=
 Cada publicación pasa por [`cloudbuild.yaml`](../cloudbuild.yaml), una cadena de
 compuertas: secretos (gitleaks) → ruff con bandit → `pip-audit` → toda la suite →
 imagen → Trivy → publicar → desplegar. Si una falla, nada llega a producción. El
-despliegue cambia la imagen de la API, `NODO_IMAGEN` y `SEED_SET`, y conserva el
-resto de la configuración.
+despliegue cambia la imagen de la API, `NODO_IMAGEN`, `SEED_SET` y `ESTADO_BUCKET`,
+y conserva el resto de la configuración.
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml --region $REGION --project $PROJECT_ID
@@ -186,24 +211,37 @@ hash. Para actualizarlas:
   `docker buildx imagetools inspect aquasec/trivy:0.57.1`) y cámbialo en
   `cloudbuild.yaml`, en un commit propio.
 
-Para que corra en cada push, conecta el repositorio de GitHub en la consola
-(Cloud Build → Repositorios) y crea el trigger. Ajusta `--branch-pattern` a la
-rama que de verdad publicas (hoy, `master`):
+**Cada push a `master` publica.** El trigger `oraculo-main` usa una conexión de
+GitHub de segunda generación (`oraculo-github`, en us-east1) y corre como
+`oraculo-build`. Para montarlo de nuevo:
 
 ```bash
-gcloud builds triggers create github --name=oraculo-main \
-  --repo-owner=TU_USUARIO --repo-name=oraculo \
-  --branch-pattern='^master$' --build-config=cloudbuild.yaml
+# 1. La conexión. El agente de Cloud Build necesita crear el secreto con el token de GitHub:
+P4SA=service-$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')@gcp-sa-cloudbuild.iam.gserviceaccount.com
+gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$P4SA --role roles/secretmanager.admin
+gcloud builds connections create github oraculo-github --region $REGION
+# Abre el enlace que imprime, autoriza Cloud Build e instala su app en el repositorio.
+# 2. Quita el permiso amplio: se queda con acceso solo a su propio secreto.
+gcloud projects remove-iam-policy-binding $PROJECT_ID --member serviceAccount:$P4SA --role roles/secretmanager.admin
+# 3. El repositorio y el trigger.
+gcloud builds repositories create oraculo --connection oraculo-github --region $REGION \
+  --remote-uri https://github.com/Ayege/Mercados-de-Prediccion-en-Vivo.git
+gcloud builds triggers create github --name oraculo-main --region $REGION \
+  --repository projects/$PROJECT_ID/locations/$REGION/connections/oraculo-github/repositories/oraculo \
+  --branch-pattern '^master$' --build-config cloudbuild.yaml \
+  --service-account projects/$PROJECT_ID/serviceAccounts/oraculo-build@$PROJECT_ID.iam.gserviceaccount.com
 ```
 
 ## Cambiar las preguntas
 
-Para cambiar las preguntas sin publicar código nuevo, cambia `SEED_SET`. Las
-preguntas se vuelven a sembrar al arrancar la nueva revisión, así que **se
-pierden los mercados abiertos** y cambia el código de sala. Los juegos están en
+Para cambiar las preguntas sin publicar código nuevo, cambia `SEED_SET` y vacía
+la foto del estado (si no, la revisión nueva restaura la sala anterior). Se
+vuelven a sembrar al arrancar, así que **se pierden los mercados abiertos** y
+cambia el código de sala. Los juegos están en
 [PREGUNTAS.md](PREGUNTAS.md#juegos-de-preguntas).
 
 ```bash
+gcloud storage rm gs://$PROJECT_ID-estado/estado/sala.bin
 gcloud run services update oraculo-api --region $REGION --update-env-vars SEED_SET=real
 ```
 

@@ -105,6 +105,11 @@ que protegen en una demo de 40 minutos:
   integridad; durante una sesión se sube a `min-instances 1`.
 - **El presupuesto no corta el gasto.** Solo alerta. Los frenos reales son
   `ActuationPolicy`, la escala a cero y la vigilia.
+- **La foto del estado se lee con pickle.** pickle ejecuta código al leer, así
+  que antes se verifica la firma HMAC (clave derivada de `PRESENTER_KEY`), la
+  huella del código y la edad. Quien pueda escribir en el bucket sin conocer la
+  clave no puede colar una foto. El bucket no es público y solo `oraculo-run`
+  escribe en él.
 - **Sin WAF ni Cloud Armor.** La API está detrás del frontend de Google. Para
   más que una sala, el siguiente paso sería un balanceador con Cloud Armor.
 

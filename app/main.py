@@ -15,6 +15,7 @@ from .adapters.news.vertex import VertexNewsDesk, VertexNewsReader
 from .adapters.oracle.mock import MockOracle
 from .adapters.oracle.vertex import VertexOracle
 from .adapters.prices import CloudBillingPrices, FixedPrices
+from .adapters.state import GcsStateStore, SignedPickle
 from .adapters.topology.mock import MockTopologyGenerator
 from .adapters.topology.vertex import VertexTopologyGenerator
 from .adapters.vertex_client import VertexClient
@@ -23,6 +24,7 @@ from .application.cloud import CloudService
 from .application.infra import InfraController
 from .application.judges import CompositeJudge
 from .application.news import NewsService
+from .application.persistence import Persistence
 from .application.ports import OracleGateway, TopologyGenerator
 from .application.real_market import RealMarket
 from .application.service import MarketService
@@ -103,6 +105,19 @@ def build_news(settings: Settings, service: MarketService) -> NewsService:
                        cooldown=settings.oracle_cooldown)
 
 
+def build_persistence(settings: Settings, service: MarketService, news: NewsService, cloud: CloudService,
+                      infra: InfraController | None) -> Persistence | None:
+    """Solo con ESTADO_BUCKET: en local, el estado vive y muere con el proceso."""
+    if not settings.state_bucket:
+        return None
+    parts = {"mercado": service, "noticias": news, "nube": cloud}
+    if infra:
+        parts["infra"] = infra
+    codec = SignedPickle(settings.presenter_key, max_age=settings.state_max_hours * 3600)
+    return Persistence(GcsStateStore(settings.state_bucket), codec, service.repo, parts,
+                       every=settings.state_every)
+
+
 def build_service(settings: Settings, oracle: OracleGateway | None = None,
                   cloud: CloudService | None = None, infra: InfraController | None = None) -> MarketService:
     return MarketService(
@@ -133,9 +148,10 @@ def build(settings: Settings | None = None, service: MarketService | None = None
     if settings.vigil_account:
         async def scheduler_check(token: str) -> bool:
             return await verify_google_oidc(token, settings.vigil_audience, settings.vigil_account)
+    news = build_news(settings, service)
     return create_app(service, cloud, infra, settings.presenter_key, settings.revision,
-                      docs=settings.api_docs, scheduler_check=scheduler_check,
-                      news=build_news(settings, service))
+                      docs=settings.api_docs, scheduler_check=scheduler_check, news=news,
+                      persistence=build_persistence(settings, service, news, cloud, infra))
 
 
 app = build()
