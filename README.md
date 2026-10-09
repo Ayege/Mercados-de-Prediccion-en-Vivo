@@ -23,8 +23,8 @@ Hay tres pantallas:
 | Pantalla | Quién la ve | Para qué |
 | --- | --- | --- |
 | `/` | Cada persona, en su móvil | Entrar con el código de sala, apostar y responder el censo |
-| `/proyeccion.html` | Todos, en una pantalla compartida | Ver los mercados y el código de sala; quien modera consulta al oráculo y crea preguntas desde las noticias |
-| `/nube.html` | Quien modera | Ver y controlar la nube |
+| `/proyeccion.html` | Todos, en una pantalla compartida | Ver los mercados, el código de sala y el mercado real de la nube; quien modera consulta al oráculo, crea preguntas desde las noticias y arranca o apaga la nube |
+| `/nube.html` | Quien modera | Todos los detalles de la nube: topologías, nodos, fallas reales y la política de actuación |
 
 Los controles de moderación aparecen solo si la URL termina en `#clave=…`.
 

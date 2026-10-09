@@ -241,7 +241,7 @@ async function pintarInfra(puedeControlar) {
     `último ciclo ${hora(v.last_cycle)} · límites: ${v.policy.max_services} servicios, ` +
     `${v.policy.max_total_min} instancias mínimas en total, ${v.policy.max_max_per_region} máximas por región, ` +
     `un cambio de escala cada ${v.policy.seconds_between_changes} s por región. ` +
-    `Si nadie mira esta página ${Math.round(v.ttl / 60)} min (una pestaña oculta no cuenta), la vigilia borra los nodos.`);
+    `Si nadie mira esta página ni la proyección con la clave ${Math.round(v.ttl / 60)} min (una pestaña oculta no cuenta), la vigilia borra los nodos.`);
   document.getElementById("infra-controles").hidden = !puedeControlar;
   document.querySelector('[data-infra="actuar"]').textContent = v.active ? "Pausar actuación" : "Activar actuación";
   const notas = [...(v.last_error ? [v.last_error] : []), ...v.notes];

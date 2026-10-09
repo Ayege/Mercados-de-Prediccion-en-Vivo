@@ -10,6 +10,14 @@ function contraste(m) {
   if (!v) return "";
   const sala = `La sala creía ${pct(v.price_yes)} SÍ.`;
   if (v.outcome === "UNRESOLVED") {
+    // Que la IA no responda a algo que todavía no pasó es lo que se quiere ver, no un fallo.
+    // Mientras tanto, la predicción es la de la sala, y sigue viva.
+    if (m.kind === "futuro" || seNego(v)) {
+      return `<strong class="pendiente">La IA no responde, y es lo correcto.</strong> ${motivo(m)}
+        ${v.reasoning ? `<span class="cita">«${esc(v.reasoning)}»</span>` : ""}
+        <span>Hasta que pase, la única predicción es la de la sala:
+        <strong>${pct(m.prices.YES)} SÍ</strong>. La pregunta sigue abierta.</span>`;
+    }
     return `<strong class="pendiente">Aún no se sabe.</strong> ${motivo(m)}
       <span class="tenue">${sala} La pregunta sigue abierta.</span>`;
   }
@@ -96,7 +104,7 @@ function veredicto(m) {
   if (!v) return "";
   const fuentes = v.evidence.length
     ? `<p>Fuentes: ${[...new Set(v.evidence.map(e => esc(e.domain)))].join(" · ")}</p>` : "";
-  return `<p class="veredicto">${contraste(m)}</p>
+  return `<div class="veredicto">${contraste(m)}</div>
     <details class="pequeno"><summary>Ver cómo lo decidió</summary>
       ${v.reasoning ? `<p>${esc(v.reasoning)}</p>` : ""}
       ${fuentes}
@@ -135,7 +143,10 @@ function ponente(m) {
   const fallos = Object.entries(FALLOS).filter(([k]) => m.framing || !(k in (info.framing_faults || {})));
   const revelar = m.framing && !m.framing.revealed
     ? `<button data-revelar="${m.id}" title="Muestra los dos titulares en la proyección">Revelar titulares</button>` : "";
-  return `<div class="ponente fila">
+  // Antes de la fecha, preguntar sirve para ver que la IA no inventa: conviene decirlo antes de pulsar.
+  const pronto = m.kind === "futuro" ? "Todavía no puede saberse: si preguntas ahora, lo correcto es que la IA se niegue."
+    : m.topic ? "Si la fecha del criterio no ha llegado, lo correcto es que la IA se niegue: no adivina el futuro." : "";
+  return `<div class="ponente">${pronto && !m.oracle ? `<p class="pequeno tenue">${pronto}</p>` : ""}<div class="fila">
     <button data-resolver="${m.id}" ${espera ? "disabled" : ""}
       title="${m.framing ? "Consulta tres veces: sin titular y con cada uno. Solo acepta si coinciden" : ""}">
       ${espera ? "La IA está buscando…" : "Preguntar a la IA"}</button>${revelar}
@@ -143,7 +154,7 @@ function ponente(m) {
       <select data-fallo="${m.id}" aria-label="Provocar un fallo en la próxima consulta">
         <option value="">sin fallo</option>
         ${fallos.map(([k, t]) => `<option value="${k}">provocar: ${t}</option>`).join("")}
-      </select></details></div>`;
+      </select></details></div></div>`;
 }
 
 function tarjeta(m, destacada) {
@@ -301,6 +312,98 @@ document.getElementById("borradores").addEventListener("click", async e => {
   pintar();
 });
 
+// --- la nube negocia sus recursos: el mercado real, legible desde lejos ------------------
+// Con la clave, este sondeo es el que mueve el ciclo real (como nube.html): basta con proyectar esta página.
+const LUGAR = { "us-east1": "Carolina del Sur", "us-central1": "Iowa", "europe-west1": "Bélgica",
+                "southamerica-east1": "São Paulo" };
+const lugar = r => LUGAR[r] || r;
+const micro = usd => usd == null ? "—" : `${(usd * 1e6).toFixed(2)} µUSD`;
+let nubeActiva = false;
+
+function pistaNube(v, m) {
+  if (m.error) return `El mercado no puede operar: ${m.error}`;
+  if (!v.active) {
+    return esPonente(info) ? "En pausa: nada cuesta. Pulsa «Arrancar la nube» para crear los servicios de los agentes."
+      : "La nube está en pausa.";
+  }
+  if (!m.cycles) return "Creando los servicios de los agentes en Cloud Run (unos 30 s)…";
+  if (!m.trades.length || !m.trades[0].demand) {
+    return "Sin tráfico no hay nada que vender: abran la página en el móvil. Cada móvil abierto es demanda.";
+  }
+  return `Subasta ${m.cycles} · generación ${m.generation}. Cada móvil abierto es demanda que se subasta.`;
+}
+
+async function pintarNube() {
+  const v = await api("/api/infra", { headers: cabeceras() });
+  const caja = document.getElementById("nube");
+  const m = v.market;
+  caja.hidden = !m;
+  if (!m) return;
+  nubeActiva = v.active;
+  document.getElementById("nube-modo").textContent = v.mode === "real" ? "Google Cloud real"
+    : `modo ${v.mode}: nada es real ni cobra`;
+  const ahora = v.rps.length ? v.rps[v.rps.length - 1].real : 0;
+  const vendidas = m.agents.reduce((x, a) => x + a.served, 0);
+  const real = v.mode === "real";
+  document.getElementById("nube-pista").textContent = pistaNube(v, m);
+  pintarSi(document.getElementById("nube-cifras"), `
+    <div><span class="pequeno tenue">Demanda de la sala</span><strong>${ahora.toFixed(1)} req/s</strong></div>
+    <div><span class="pequeno tenue">Peticiones vendidas</span><strong>${vendidas}</strong></div>
+    <div><span class="pequeno tenue">${real ? "Gasto real en Google Cloud" : "Gasto (ensayo, no cobra)"}</span><strong>${micro(m.spend_usd)}</strong></div>
+    <div><span class="pequeno tenue">Generación</span><strong>${m.generation}</strong></div>`);
+  pintarSi(document.getElementById("nube-agentes"), `<table>
+    <thead><tr><th>agente</th><th>dónde</th><th>pide por petición</th><th>vendió</th><th>instancia caliente</th>
+      <th>${real ? "ganancia real" : "ganancia (ensayo)"}</th></tr></thead>
+    <tbody>${m.agents.map(a => `<tr>
+      <td><strong>${esc(a.id)}</strong></td><td>${esc(lugar(a.region))}</td><td>${micro(a.ask_usd)}</td>
+      <td>${a.served}${a.late + a.failed ? ` <span class="tenue">(${a.late + a.failed} tarde o con error)</span>` : ""}</td>
+      <td>${a.genome.warm ? "sí, la paga" : "no"}</td>
+      <td><strong class="${a.profit_usd > 0 ? "si" : a.profit_usd < 0 ? "no" : ""}">${micro(a.profit_usd)}</strong></td>
+    </tr>`).join("")}</tbody></table>`);
+  const nombre = id => { const a = m.agents.find(x => x.id === id); return a ? `${id} (${lugar(a.region)})` : id; };
+  pintarSi(document.getElementById("nube-subastas"), m.trades.slice(0, 4).map(t => {
+    const vendidas = Object.values(t.fills).reduce((x, y) => x + y, 0);
+    const quien = Object.entries(t.fills).map(([k, n]) => `${esc(nombre(k))} ×${n}`).join(", ");
+    return `<li><span class="tenue">${hora(t.at)}</span> pidieron ${t.demand} → vendidas ${vendidas} a
+      <strong>${micro(t.price)}</strong>${quien ? ` · ${quien}` : ""}</li>`;
+  }).join("") || `<li class="tenue">Sin subastas todavía.</li>`);
+  const contratos = m.contracts.slice(0, 2).map(c => `<li>contrato de ${c.qty} entre dos regiones:
+    <span class="${c.fulfilled ? "si" : c.fulfilled === false ? "no" : "pendiente"}">${esc(c.detail)}</span></li>`);
+  const generaciones = m.generations.slice().reverse().slice(0, 3).map(g => `<li>generación ${g.number}:
+    ${Math.round(g.warm_share * 100)} % pagan instancia caliente · ganó ${esc(nombre(g.best))}</li>`);
+  pintarSi(document.getElementById("nube-evolucion"), [...contratos, ...generaciones].join("")
+    || `<li class="tenue">La primera coalición llega a las ${m.budget.contract_every} subastas; la primera
+        generación, a las ${m.budget.generation_cycles}.</li>`);
+  const controles = document.getElementById("nube-controles");
+  controles.hidden = !esPonente(info);
+  controles.querySelector('[data-nube="actuar"]').textContent = v.active ? "Pausar la nube" : "Arrancar la nube";
+}
+
+function hora(t) {
+  return t ? new Date(t * 1000).toLocaleTimeString() : "—";
+}
+
+document.getElementById("nube-controles").addEventListener("click", async e => {
+  const b = e.target.closest("[data-nube]");
+  if (!b) return;
+  const error = document.getElementById("error");
+  error.textContent = "";
+  let ruta = `/api/infra/actuar?activo=${!nubeActiva}`;
+  if (b.dataset.nube === "apagar") {
+    if (!confirm("¿Borrar todos los servicios reales y pausar la nube?")) return;
+    ruta = "/api/infra/apagar";
+  }
+  b.disabled = true;
+  try {
+    await api(ruta, { method: "POST", headers: cabeceras() });
+  } catch (err) {
+    error.textContent = err.message;
+  } finally {
+    b.disabled = false;
+    pintarNube().catch(() => {});
+  }
+});
+
 api("/api/info").then(i => {
   info = i;
   document.getElementById("url").textContent = location.host;
@@ -315,5 +418,7 @@ api("/api/info").then(i => {
   }
   document.getElementById("noticias").hidden = !(ponente && i.news);
   if (ponente && i.news) pintarNoticias().catch(err => { document.getElementById("error").textContent = err.message; });
+  document.getElementById("nube-enlace").href = `nube.html${location.hash}`;
   sondear(pintar, 2000);
+  if (i.infra && i.infra !== "apagado") sondear(pintarNube, 3000);
 });

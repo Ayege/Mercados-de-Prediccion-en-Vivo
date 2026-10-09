@@ -51,6 +51,11 @@ function barra(p) {
   </div>`;
 }
 
+// La IA propuso SIN RESOLVER por su cuenta (no fue la política quien la frenó): casi siempre, porque
+// el hecho todavía no ha pasado. Es la respuesta correcta, no un fallo.
+const seNego = v => v.trace.some(t => t.startsWith("veredicto propuesto: UNRESOLVED"))
+  && !v.trace.some(t => t.includes("fail-closed") || t.startsWith("política: resultado inválido"));
+
 // Por qué no hubo respuesta, en palabras. Las líneas «política: …» las escribe AcceptancePolicy;
 // el censo y la nube ya explican su motivo en `reasoning`.
 function motivo(m) {
@@ -66,6 +71,7 @@ function motivo(m) {
   if (politica.includes("confianza")) return "La IA no estaba lo bastante segura, así que no lo damos por cerrado.";
   if (v.trace.some(t => t.includes("fail-closed"))) return "No pudimos leer la respuesta de la IA. Ante la duda, no decidimos.";
   if (v.trace.some(t => t.startsWith("política de encuadre") && t.includes("→ UNRESOLVED"))) return "La IA cambió de opinión según el titular que leyó, así que no le creemos.";
+  if (seNego(v)) return "La IA misma dice que todavía no ha pasado, así que no adivina.";
   return "La IA no encontró pruebas suficientes: puede que todavía no haya pasado.";
 }
 

@@ -32,20 +32,33 @@
   .destacada .barra { height: 2.8rem; font-size: 1.1rem; }
   .destacada .veredicto { font-size: 1.35rem; }
   .compacta { grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+  .veredicto > span { display: block; margin-top: .3rem; font-size: 1.05rem; }
+  #nube-enlace { color: var(--acento); }
+  .cita { font-style: italic; font-size: .95rem; color: var(--tenue); }
+  #nube { margin-top: 2.5rem; }
+  .cifras-nube { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .6rem;
+    margin: .8rem 0; }
+  .cifras-nube > div { background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px;
+    padding: .6rem .8rem; }
+  .cifras-nube strong { display: block; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+  #nube-agentes table { font-size: 1rem; }
 </style>
 </head>
 <body>
 <main>
   <h1>Oráculo</h1>
-  <p class="lema">¿Cuánto sabe esta sala sin buscar en Google? Ustedes apuestan; una IA busca la respuesta.</p>
+  <p class="lema">¿Cuánto sabe esta sala sin buscar en Google? Ustedes predicen ahora; una IA verifica después.</p>
   <section class="entrar tarjeta">
     <p>Entra desde tu móvil: <strong class="url" id="url"></strong></p>
     <p class="sala" id="sala" hidden>Código de la sala: <strong></strong></p>
   </section>
   <ol class="pasos">
-    <li><strong>Ustedes apuestan</strong> SÍ o NO desde el móvil. La barra muestra lo que cree la sala.</li>
-    <li><strong>Una IA busca</strong> la respuesta en internet y trae sus fuentes.</li>
-    <li><strong>El código decide</strong> si esas pruebas alcanzan. Si no, dice «aún no se sabe».</li>
+    <li><strong>Predecir.</strong> Ustedes apuestan SÍ o NO desde el móvil. La barra es lo que cree la sala: su
+      predicción.</li>
+    <li><strong>Verificar.</strong> Cuando el hecho ya pasó, una IA busca la respuesta en internet y trae sus
+      fuentes.</li>
+    <li><strong>Desconfiar.</strong> El código decide si esas pruebas alcanzan. Si el hecho no ha pasado o faltan
+      pruebas, dice «aún no se sabe» y la apuesta sigue abierta. Negarse a tiempo es acertar.</li>
   </ol>
   <p class="error" id="error" role="alert"></p>
   <section class="tarjeta" id="noticias" hidden>
@@ -59,6 +72,25 @@
     <div id="borradores"></div>
   </section>
   <div id="lista"></div>
+  <section id="nube" hidden>
+    <h2>La nube negocia sus recursos <span class="chip" id="nube-modo"></span></h2>
+    <p class="tenue">Cuatro agentes, cada uno con su propio servicio de Cloud Run en una región distinta, compiten por
+      atender el tráfico de sus móviles. Cada 10 s hay una subasta: venden los que piden menos. Solo cobran lo que
+      atienden a tiempo y pagan lo que de verdad cuesta Cloud Run. Cada 12 subastas, la evolución copia a los que
+      más ganaron.</p>
+    <p class="aviso" id="nube-pista"></p>
+    <div class="cifras-nube" id="nube-cifras"></div>
+    <div class="tabla" id="nube-agentes"></div>
+    <div class="rejilla compacta" style="margin-top:.8rem">
+      <div><strong class="pequeno">Últimas subastas</strong><ul class="intentos" id="nube-subastas"></ul></div>
+      <div><strong class="pequeno">Coaliciones y evolución</strong><ul class="intentos" id="nube-evolucion"></ul></div>
+    </div>
+    <div class="fila" id="nube-controles" hidden>
+      <button data-nube="actuar"></button>
+      <button data-nube="apagar" class="no" title="Borra los servicios reales y pausa la actuación">Apagar todo</button>
+      <a class="pequeno" id="nube-enlace" href="nube.html">Ver todos los detalles de la nube</a>
+    </div>
+  </section>
   <details class="pie pequeno"><summary>Detalles técnicos</summary>
     <p class="tenue" id="info"></p>
     <p class="tenue">Es una demostración: con esta sala, dinero ficticio y unos minutos, no prueba la sabiduría
